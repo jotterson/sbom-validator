@@ -9,11 +9,17 @@ import hashlib
 import logging
 import os
 
-from spdx_utilities import add_checksum_to_spdx_file, new_spdx_doc, new_spdx_file, new_spdx_pkg, read_tv_file, set_spdx_file_type, write_tv_file
+from spdx_utilities import \
+    add_checksum_to_spdx_file, \
+    new_spdx_doc, \
+    new_spdx_file, \
+    new_spdx_pkg, \
+    read_tv_file, \
+    write_tv_file
 
-from spdx.checksum import Algorithm
 
 spdx_id_counter = 0
+
 
 def new_spdx_id():
     global spdx_id_counter
@@ -49,7 +55,6 @@ def calculate_hash_for_file(filename, hash_name='sha256'):
     returns a string containing the hex value of the hash.
     hash_name can be sha256, sha512, md5, sha1, etc.  only the names shown here are tested. YMMV.
     """
-    file_hash = None
     hasher = hashlib.new(hash_name)
     with open(filename, 'rb') as fh:
         while True:
@@ -77,7 +82,7 @@ def main():
         exit(1)
 
     if args.tvfile is None:
-        logging.error(('--tvfile must be present'))
+        logging.error('--tvfile must be present')
         exit(1)
 
     if not os.path.isdir(args.packagepath):
