@@ -1,5 +1,7 @@
 #!/bin/false
-
+"""
+this file contains useful utility functions for manipulating SPDX SBOM data.
+"""
 import codecs
 import logging
 import pathlib
