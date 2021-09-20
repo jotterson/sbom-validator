@@ -36,7 +36,7 @@ file_extension_to_spdx_file_type_mapping = {
     '.htm': [FileType.TEXT, FileType.DOCUMENTATION, FileType.OTHER],
     '.html': [FileType.TEXT, FileType.DOCUMENTATION, FileType.OTHER],
     '.ico': [FileType.IMAGE, FileType.OTHER],
-    '.jar': [FileType.ARCHIVE],
+    '.jar': [FileType.APPLICATION, FileType.ARCHIVE],
     '.jpg': [FileType.IMAGE, FileType.OTHER],
     '.js': [FileType.TEXT, FileType.APPLICATION, FileType.SOURCE],
     '.jsp': [FileType.TEXT, FileType.APPLICATION, FileType.SOURCE],
@@ -53,7 +53,7 @@ file_extension_to_spdx_file_type_mapping = {
     '.woff': [FileType.OTHER],
     '.woff2': [FileType.OTHER],
     '.xsd': [FileType.TEXT, FileType.APPLICATION, FileType.OTHER],
-    '.zip': [FileType.ARCHIVE]
+    '.zip': [FileType.APPLICATION, FileType.ARCHIVE]
 }
 
 

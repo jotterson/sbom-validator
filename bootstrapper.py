@@ -27,6 +27,7 @@ def new_spdx_id():
     spdx_id_counter += 1
     return 'SPDXRef-{:06d}'.format(spdx_id_counter)
 
+
 def main():
     parser = argparse.ArgumentParser(description='Bootstrap SBOM file')
     parser.add_argument('--debug', action='store_true', help='output API debug data')
