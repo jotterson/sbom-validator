@@ -6,7 +6,6 @@ import codecs
 import hashlib
 import logging
 import pathlib
-import pickle
 
 from spdx.writers.tagvalue import write_document, InvalidDocumentError
 from spdx.parsers.loggers import ErrorMessages
@@ -182,7 +181,7 @@ def spdx_document_bytes_to_sign(spdx_doc):
     """
     doc_comment = spdx_doc.comment
     spdx_doc.comment = None
-    sign_bytes = pickle.dumps(serialize_spdx_doc(spdx_doc))
+    sign_bytes = serialize_spdx_doc(spdx_doc)
     spdx_doc.comment = doc_comment
     return sign_bytes
 
@@ -197,17 +196,48 @@ def serialize_spdx_doc(spdx_doc):
     """
     result = str(spdx_doc.version)
     result += str(spdx_doc.data_license)
-    result += spdx_doc.name
+    result += str(spdx_doc.name)
     result += str(spdx_doc.license_list_version)
-    result += spdx_doc.spdx_id
+    result += str(spdx_doc.spdx_id)
     result += str(spdx_doc.ext_document_references)
-    result += spdx_doc.namespace
-    # result += str(spdx_doc.creation_info)  # this causes problems  FIXME
+    result += str(spdx_doc.namespace)
+    result += serialize_spdx_doc_creation_info(spdx_doc.creation_info)
     result += str(spdx_doc.extracted_licenses)
-    result += str(spdx_doc.reviews)  # FIXME loop
-    result += str(spdx_doc.annotations)  # FIXME loop
-    result += str(spdx_doc.relationships)  # FIXME loop
-    result += str(spdx_doc.snippet)  # FIXME loop
+    reviews_strings = []
+    for review in spdx_doc.reviews:
+        reviews_strings.append('{} {} {}'.format(str(review.reviewer), str(review.review_date), str(review.comment)))
+    for review_string in sorted(reviews_strings):
+        result += review_string
+    annotations_strings = []
+    for annotation in spdx_doc.annotations:
+        annotations_strings.append('{} {} {} {} {}'.format(str(annotation.annotator),
+                                                           str(annotation.annotation_date),
+                                                           str(annotation.annotation_type),
+                                                           str(annotation.comment),
+                                                           str(annotation.spdx_id)))
+    for annotations_string in sorted(annotations_strings):
+        result += annotations_string
+    relationships_strings = []
+    for relationship in spdx_doc.relationships:
+        relationships_strings.append('{} {}'.format(str(relationship.relationship),
+                                                    str(relationship.relationship_comment)))
+    for relationships in sorted(relationships_strings):
+        result += str(relationships)
+
+    snippet_strings = []
+    for snippet in spdx_doc.snippet:
+        snippet_strings.append('{} {} {} {} {} {} {} {} {}'.format(str(snippet.spdx_id),
+                                                                   str(snippet.name),
+                                                                   str(snippet.comment),
+                                                                   str(snippet.copyright),
+                                                                   str(snippet.licenses_comment),
+                                                                   str(snippet.attribution_text),
+                                                                   str(snippet.snip_from_file_spdxid),
+                                                                   str(snippet.conc_lics),
+                                                                   str(snippet.licenses_in_snippet)))  # need loop?
+    for snippet_string in snippet_strings:
+        result += snippet_string
+
     for package in spdx_doc.packages:
         result += str(package.name)
         result += str(package.spdx_id)
@@ -261,6 +291,19 @@ def serialize_spdx_doc(spdx_doc):
                 result += str(artifact_of_project_home)
             for artifact_of_project_uri in sorted(file.artifact_of_project_uri):
                 result += str(artifact_of_project_uri)
+    return result.encode('utf-8')
+
+
+def serialize_spdx_doc_creation_info(creation_info):
+    result = ''
+    creators = []
+    for creator in creation_info.creators:
+        creators.append(str(creator))
+    for creator in sorted(creators):
+        result += creator
+    result += str(creation_info.created)[:19]  # trim this, the milliseconds are lost when the file is saved.
+    result += str(creation_info.comment)
+    result += str(creation_info.license_list_version)
     return result
 
 
