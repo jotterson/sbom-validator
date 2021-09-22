@@ -25,7 +25,7 @@ def validate_signature(public_key, signature, data_to_validate):
                           data_to_validate,
                           padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
                           hashes.SHA256())
-    except InvalidSignature as ex:
+    except InvalidSignature:
         return False
     return True
 

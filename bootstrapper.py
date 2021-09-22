@@ -30,6 +30,7 @@ def new_spdx_id():
     return 'SPDXRef-{:06d}'.format(spdx_id_counter)
 
 
+# noinspection DuplicatedCode
 def main():
     parser = argparse.ArgumentParser(description='Bootstrap SBOM file')
     parser.add_argument('--debug', action='store_true', help='output API debug data')
@@ -84,7 +85,7 @@ def main():
     # sign the spdx file if the private key was specified
     if private_key:
         signature = signature_utilities.create_signature(private_key,
-                                                         spdx_utilities.get_hash_of_spdx_document(spdx_doc))
+                                                         spdx_utilities.serialize_spdx_doc(spdx_doc))
         spdx_utilities.add_signature_to_spdx_document(spdx_doc, signature)
 
     # write the spdx file.
@@ -94,8 +95,24 @@ def main():
     # read the spdx file for basic verification
     logging.info('reading file {}'.format(args.tvfile))
 
-    #  new_doc = read_tv_file('test.spdx')
     new_doc = read_tv_file(args.tvfile)
+
+    if True:  # debug
+        if args.privatekey:
+            public_key = signature_utilities.read_ssh_public_key(args.privatekey + '.pub')
+        else:
+            public_key = None
+        if public_key:
+            # validate digital signature on sbom document data
+            new_doc_data = spdx_utilities.serialize_spdx_doc(new_doc)
+            signature = spdx_utilities.get_digital_signature_from_spdx_document(new_doc)
+            if not signature_utilities.validate_signature(public_key, signature, new_doc_data):
+                print('Digital Signature Mismatch!')
+                logging.warning('Digital signature mismatch')
+                exit(13)
+            else:
+                logging.info('Digital signature on SBOM file is good.  SBOM file appears authentic.')
+
     if new_doc is not None:
 
         logging.info('Found {} files'.format(len(new_doc.packages[0].files)))

@@ -3,22 +3,21 @@
 this file contains useful utility functions for manipulating SPDX SBOM data.
 """
 import codecs
-import hashlib
 import logging
 import pathlib
 
 from spdx.writers.tagvalue import write_document, InvalidDocumentError
 from spdx.parsers.loggers import ErrorMessages
 from spdx.parsers.loggers import StandardLogger
-from spdx.document import Document, License, LicenseConjunction, ExtractedLicense
+from spdx.document import Document, License  # , LicenseConjunction, ExtractedLicense
 from spdx.version import Version
-from spdx.creationinfo import Person
+from spdx.creationinfo import CreationInfo  # ,Person
 from spdx.creationinfo import Tool
-from spdx.review import Review
+# from spdx.review import Review
 from spdx.package import Package
 from spdx.file import File, FileType
 from spdx.checksum import Algorithm
-from spdx.utils import SPDXNone, NoAssert, UnKnown
+from spdx.utils import NoAssert  # , SPDXNone, UnKnown
 from spdx.parsers.tagvalue import Parser
 from spdx.parsers.tagvaluebuilders import Builder
 
@@ -73,21 +72,35 @@ def set_spdx_file_type(spdx_file, filename):
     spdx_file.file_types = spdx_file_types
 
 
-def new_spdx_doc(name='SimpleSPDX', namespace='https://www.example.com/example'):
+def new_spdx_doc(name='SimpleSPDX', namespace='https://www.example.com/example', toolname='unknown tool'):
+    """
+    create a new SPDX SBOM doc
+    :param name: name of new SPDX document
+    :param namespace: namespace of new SPDX document
+    :param toolname: name of tool used to create new SPDX document
+    :return: the new SPDX Document object
+    """
     doc = Document()
     doc.version = Version(2, 1)
     doc.name = name
     doc.spdx_id = 'SPDXRef-DOCUMENT'
     doc.comment = 'Signature: none'
-    doc.namespace = namespace  # "http://www.example.org/spdx"
+    doc.namespace = namespace
     doc.data_license = License.from_identifier("CC0-1.0")
     #  doc.creation_info.add_creator(Person("Alice", "alice@example.com"))
-    doc.creation_info.add_creator(Tool('bar'))
+    doc.creation_info.add_creator(Tool(toolname))
     doc.creation_info.set_created_now()
     return doc
 
 
 def new_spdx_pkg(spdx_id, name, version):
+    """
+    create a new SPDX package object
+    :param spdx_id:
+    :param name:
+    :param version:
+    :return: the new Package object
+    """
     # Package
     package = Package()
     package.name = name
@@ -112,12 +125,20 @@ def new_spdx_pkg(spdx_id, name, version):
     return package
 
 
-def new_spdx_file(filename, spdx_id):
+def new_spdx_file(filename, spdx_id, comment=None):
+    """
+    Create a new SPDX File object
+    :param filename: the relative path to the file
+    :param spdx_id: a unique ID
+    :param comment: optional comment string
+    :return: the SPDX File object
+    """
     spdx_file = File(filename)
     set_spdx_file_type(spdx_file, filename)
     #  spdx_file.type = spdx_file_type(filename)
     spdx_file.spdx_id = spdx_id
-    #  spdx_file.comment = "This is a test file."
+    if comment:
+        spdx_file.comment = comment
     #  spdx_file.chk_sum = Algorithm("SHA1", "c537c5d99eca5333f23491d47ededd083fefb7ad")
     spdx_file.conc_lics = NoAssert()
     spdx_file.add_lics(NoAssert())
@@ -129,7 +150,15 @@ def new_spdx_file(filename, spdx_id):
 
 
 def add_checksum_to_spdx_file(spdx_file, algorithm_name, hash_value):
+    """
+    add a checksum to a SPDX file object
+    :param spdx_file: the SPDX File object to modify
+    :param algorithm_name: the name of the hash algorithm
+    :param hash_value:  the base64 encoded hash digest string
+    :return: the supplied, modified SPDX File object, just in case.
+    """
     spdx_file.chk_sums.append(Algorithm(algorithm_name, hash_value))
+    return spdx_file
 
 
 def read_tv_file(filename):
@@ -140,8 +169,6 @@ def read_tv_file(filename):
     """
     p = Parser(Builder(), StandardLogger())
     p.build()
-    #document = None
-    #error = None
     with open(filename, "r") as f:
         data = f.read()
         document, error = p.parse(data)
@@ -171,149 +198,162 @@ def write_tv_file(doc, filename):
             raise
 
 
-def spdx_document_bytes_to_sign(spdx_doc):
-    """
-    I want to put the digital signature of the SBOM into the 'comment' field of the spdx document.
-    in order to do this, I need to make sure the comment field is not included when hashing the spdx
-    document in order to create it's unique hash.
-    :param spdx_doc:
-    :return:
-    """
-    doc_comment = spdx_doc.comment
-    spdx_doc.comment = None
-    sign_bytes = serialize_spdx_doc(spdx_doc)
-    spdx_doc.comment = doc_comment
-    return sign_bytes
-
-
+# noinspection DuplicatedCode
 def serialize_spdx_doc(spdx_doc):
     """
-    so this sucks.  I need to serialize the spdx doc so I can calculate a hash code, but I need it to look the same
-    every time.  this is a blune instrument to perform that conversion.  I don't care about deserialization, only
-    equality of the hashed value.
-    :param spdx_doc: the spdx document to serialize
-    :return: a string that kinda represents the spdx document.
+    in order to test the digital signature of the SPDX Document, it needs to be serialized
+    so it can be hashed and signed or validated.  This is a specialized serializer that is
+    made for that purpose only.  There is no corresponding de-serializer, one is not needed.
+    Note that this works with my data, more complex SPDX Documents may not serialize properly,
+    this may need further attention.
+    :param spdx_doc:
+    :return: a byte array that represents the SPDX Document object, more-or-less.
     """
-    result = str(spdx_doc.version)
-    result += str(spdx_doc.data_license)
-    result += str(spdx_doc.name)
-    result += str(spdx_doc.license_list_version)
-    result += str(spdx_doc.spdx_id)
-    result += str(spdx_doc.ext_document_references)
-    result += str(spdx_doc.namespace)
-    result += serialize_spdx_doc_creation_info(spdx_doc.creation_info)
-    result += str(spdx_doc.extracted_licenses)
-    reviews_strings = []
-    for review in spdx_doc.reviews:
-        reviews_strings.append('{} {} {}'.format(str(review.reviewer), str(review.review_date), str(review.comment)))
-    for review_string in sorted(reviews_strings):
-        result += review_string
-    annotations_strings = []
-    for annotation in spdx_doc.annotations:
-        annotations_strings.append('{} {} {} {} {}'.format(str(annotation.annotator),
-                                                           str(annotation.annotation_date),
-                                                           str(annotation.annotation_type),
-                                                           str(annotation.comment),
-                                                           str(annotation.spdx_id)))
-    for annotations_string in sorted(annotations_strings):
-        result += annotations_string
-    relationships_strings = []
-    for relationship in spdx_doc.relationships:
-        relationships_strings.append('{} {}'.format(str(relationship.relationship),
-                                                    str(relationship.relationship_comment)))
-    for relationships in sorted(relationships_strings):
-        result += str(relationships)
-
-    snippet_strings = []
-    for snippet in spdx_doc.snippet:
-        snippet_strings.append('{} {} {} {} {} {} {} {} {}'.format(str(snippet.spdx_id),
-                                                                   str(snippet.name),
-                                                                   str(snippet.comment),
-                                                                   str(snippet.copyright),
-                                                                   str(snippet.licenses_comment),
-                                                                   str(snippet.attribution_text),
-                                                                   str(snippet.snip_from_file_spdxid),
-                                                                   str(snippet.conc_lics),
-                                                                   str(snippet.licenses_in_snippet)))  # need loop?
-    for snippet_string in snippet_strings:
-        result += snippet_string
-
-    for package in spdx_doc.packages:
-        result += str(package.name)
-        result += str(package.spdx_id)
-        result += str(package.version)
-        result += str(package.file_name)
-        result += str(package.supplier)
-        result += str(package.originator)
-        result += str(package.download_location)
-        result += str(package.files_analyzed)
-        result += str(package.homepage)
-        result += str(package.verif_code)
-        result += str(package.files_analyzed)
-        result += str(package.check_sum)
-        result += str(package.source_info)
-        result += str(package.license_declared)
-        result += str(package.license_comment)
-        for license_from_file in sorted(package.licenses_from_files):
-            result += str(license_from_file)
-        result += str(package.cr_text)
-        result += str(package.summary)
-        result += str(package.description)
-        result += str(package.comment)
-        result += str(package.attribution_text)
-        result += str(package.verif_exc_files)
-        result += str(package.pkg_ext_refs)
-        for file in sorted(package.files, key=lambda f: f.spdx_id):
-            result += str(file.name)
-            result += str(file.spdx_id)
-            result += str(file.comment)
-            for ft in sorted(file.file_types):
-                result += str(ft)
-            checksum_strings = []
-            for cs in file.chk_sums:
-                checksum_strings.append('{}: {}'.format(cs.identifier, cs.value))
-            for css in sorted(checksum_strings):
-                result += str(css)
-            result += str(file.conc_lics)
-            for lf in sorted(file.licenses_in_file):
-                result += str(lf)
-            result += str(file.license_comment)
-            result += str(file.copyright)
-            result += str(file.notice)
-            result += str(file.attribution_text)
-            for contributor in sorted(file.contributors):
-                result += str(contributor)
-            for dependency in sorted(file.dependencies):
-                result += str(dependency)
-            for artifact_of_project_name in sorted(file.artifact_of_project_name):
-                result += str(artifact_of_project_name)
-            for artifact_of_project_home in sorted(file.artifact_of_project_home):
-                result += str(artifact_of_project_home)
-            for artifact_of_project_uri in sorted(file.artifact_of_project_uri):
-                result += str(artifact_of_project_uri)
+    result = ''
+    keys = sorted(spdx_doc.__dict__.keys())
+    for k in keys:
+        if k == 'comment':  # comment is not included in the serialization
+            continue
+        v = spdx_doc.__dict__.get(k)
+        if v is None:
+            result += '|{}:None'.format(k)
+        elif isinstance(v, str):
+            result += '|{}:{}'.format(k, str(v))
+        elif isinstance(v, Version):
+            result += '|{}:{}'.format(k, str(v))
+        elif isinstance(v, License):
+            result += '|{}:{}'.format(k, str(v))
+        elif isinstance(v, CreationInfo):
+            result += serialize_spdx_doc_creation_info(v)
+        elif isinstance(v, list):
+            if k == 'packages':
+                # sort packages by spdx_id
+                packages = sorted(v, key=lambda p: p.spdx_id)
+                for item in packages:
+                    result += serialize_spdx_package_info(item)
+            else:
+                result += '|{}:['.format(k)
+                first = True
+                for item in sorted(v, key=lambda val: str(val)):
+                    if not first:
+                        result += ',{}'.format(str(item))
+                    else:
+                        result += '{}'.format(str(item))
+                        first = False
+                result += ']'
+        else:
+            print(k, v, type(v))
     return result.encode('utf-8')
 
 
+# noinspection DuplicatedCode
+def serialize_spdx_package_info(spdx_package):
+    """
+    Serialize a SPDX Package object for digital signature analysis.
+    Note that there is no de-serializer for this, it is not needed.
+    :param spdx_package: the SPDX Package object to serialize
+    :return: str
+    """
+    result = ''
+    keys = sorted(spdx_package.__dict__.keys())
+    for k in keys:
+        v = spdx_package.__dict__.get(k)
+        if v is None:
+            result += '|{}:None'.format(k)
+        elif isinstance(v, str):
+            result += '|{}:{}'.format(k, str(v))
+        elif isinstance(v, NoAssert):
+            result += '|{}:NOASSERTION'.format(k)
+        elif isinstance(v, list):
+            if k == 'files':
+                # sort by spdx id else there will be problems!
+                files = sorted(v, key=lambda f: f.spdx_id)
+                for item in files:
+                    result += serialize_spdx_file_info(item)
+            else:
+                result += '|{}:['.format(k)
+                first = True
+                for item in sorted(v, key=lambda val: str(val)):
+                    if not first:
+                        result += ',{}'.format(str(item))
+                    else:
+                        result += '{}'.format(str(item))
+                        first = False
+                result += ']'
+        else:
+            print('unhandled type', k, v, type(v))
+    return result
+
+
+def serialize_spdx_file_info(spdx_file):
+    """
+    serialize a SPDX File object for digital signature processing
+    :param spdx_file: the SPDX File object to serialize
+    :return: str
+    """
+    result = ''
+    keys = sorted(spdx_file.__dict__.keys())
+    for k in keys:
+        v = spdx_file.__dict__.get(k)
+        if v is None:
+            result += '|{}:None'.format(k)
+        elif isinstance(v, str):
+            result += '|{}:{}'.format(k, str(v))
+        elif isinstance(v, NoAssert):
+            result += '|{}:NOASSERTION'.format(k)
+        elif isinstance(v, list):
+            result += '|{}:['.format(k)
+            if k == 'chk_sums':
+                checksums = []
+                for chk_sum in v:
+                    checksums.append('{}:{}'.format(chk_sum.identifier, chk_sum.value))
+                first = True
+                for checksum in sorted(checksums):
+                    if first:
+                        result += checksum
+                        first = False
+                    else:
+                        result += ',{}'.format(checksum)
+            else:
+                first = True
+                for item in sorted(v, key=lambda val: str(val)):
+                    if not first:
+                        result += ',{}'.format(str(item))
+                    else:
+                        result += '{}'.format(str(item))
+                        first = False
+            result += ']'
+        else:
+            print('serialize_spdx_file_info unhandled type', k, v, type(v))
+    return result
+
+
 def serialize_spdx_doc_creation_info(creation_info):
+    """
+    Serialize a SPDX DocCreationInfo for digital signature analysis
+    :param creation_info:
+    :return: str
+    """
     result = ''
     creators = []
     for creator in creation_info.creators:
         creators.append(str(creator))
     for creator in sorted(creators):
-        result += creator
-    result += str(creation_info.created)[:19]  # trim this, the milliseconds are lost when the file is saved.
-    result += str(creation_info.comment)
-    result += str(creation_info.license_list_version)
+        result += '|creator:{}'.format(creator)
+    result += '|created:{}'.format(str(creation_info.created)[:19])  # trim this!
+    result += '|comment:{}'.format(str(creation_info.comment))
+    result += '|license_list_version:{}'.format(str(creation_info.license_list_version))
     return result
 
 
-def get_hash_of_spdx_document(spdx_doc, hash_algorithm='sha512'):
-    hasher = hashlib.new(hash_algorithm)
-    hasher.update(spdx_document_bytes_to_sign(spdx_doc))
-    return hasher.digest()
-
-
-def get_digital_signature_of_spdx_document(spdx_doc):
+def get_digital_signature_from_spdx_document(spdx_doc):
+    """
+    get the digital signature of a SPDX document from the Document comment.
+    the digital signature is stored in the comment because there is no other
+    field in which to stick it
+    :param spdx_doc: the SPDX Document object
+    :return: str
+    """
     if spdx_doc.comment is not None:
         doc_comment = spdx_doc.comment.strip()
         if doc_comment[0:10] == 'Signature:':
@@ -323,4 +363,10 @@ def get_digital_signature_of_spdx_document(spdx_doc):
 
 
 def add_signature_to_spdx_document(spdx_doc, signature):
+    """
+    add the digital signature to the SPDX Document "comment" field.
+    :param spdx_doc: the SPDX Document to modify
+    :param signature: the base64-encoded digital signature to add to the Document
+    :return: None
+    """
     spdx_doc.comment = 'Signature: {}'.format(signature)

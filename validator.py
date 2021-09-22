@@ -10,16 +10,11 @@ import os
 
 import signature_utilities
 import spdx_utilities
-from spdx_utilities import \
-    add_checksum_to_spdx_file, \
-    new_spdx_doc, \
-    new_spdx_file, \
-    new_spdx_pkg, \
-    read_tv_file, \
-    write_tv_file
+from spdx_utilities import read_tv_file
 from validation_utilities import calculate_hash_for_file, files_in_dir
 
 
+# noinspection DuplicatedCode
 def main():
     parser = argparse.ArgumentParser(description='Bootstrap SBOM file')
     parser.add_argument('--debug', action='store_true', help='output API debug data')
@@ -46,9 +41,10 @@ def main():
         exit(1)
     package_path = args.packagepath
 
-    rsa_public_key = None
     if args.publickey is not None:
         public_key = signature_utilities.read_ssh_public_key(args.publickey)
+    else:
+        public_key = None
 
     logging.info('Enumerating files in {}...'.format(package_path))
     files = files_in_dir(package_path)
@@ -66,9 +62,9 @@ def main():
 
     if public_key is not None:
         # validate signature
-        digest = spdx_utilities.get_hash_of_spdx_document(new_doc)
-        signature = spdx_utilities.get_digital_signature_of_spdx_document(new_doc)
-        if not signature_utilities.validate_signature(public_key, signature, digest):
+        data = spdx_utilities.serialize_spdx_doc(new_doc)
+        signature = spdx_utilities.get_digital_signature_from_spdx_document(new_doc)
+        if not signature_utilities.validate_signature(public_key, signature, data):
             print('Digital Signature Mismatch!')
             logging.warning('Digital signature mismatch')
             exit(13)
