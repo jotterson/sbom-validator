@@ -10,6 +10,8 @@ import argparse
 import logging
 import os
 
+import signature_utilities
+import spdx_utilities
 from spdx_utilities import \
     add_checksum_to_spdx_file, \
     new_spdx_doc, \
@@ -33,6 +35,7 @@ def main():
     parser.add_argument('--debug', action='store_true', help='output API debug data')
     parser.add_argument('--tvfile', type=str, help='SBOM tag/value filename to write')
     parser.add_argument('--packagepath', type=str, help='path to base of package')
+    parser.add_argument('--privatekey', type=str, help='private key for signing SBOM')
     args = parser.parse_args()
 
     if args.debug:
@@ -47,6 +50,11 @@ def main():
     if args.tvfile is None:
         logging.error('--tvfile must be present')
         exit(1)
+
+    if args.privatekey:
+        private_key = signature_utilities.read_ssh_private_key(args.privatekey)
+    else:
+        private_key = None
 
     if not os.path.isdir(args.packagepath):
         logging.error('packagepath "{}" is not a directory.'.format(args.packagepath))
@@ -72,6 +80,12 @@ def main():
     # update pkg verification code.
     spdx_pkg.verif_code = spdx_pkg.calc_verif_code()
     spdx_doc.add_package(spdx_pkg)
+
+    # sign the spdx file if the private key was specified
+    if private_key:
+        signature = signature_utilities.create_signature(private_key,
+                                                         spdx_utilities.get_hash_of_spdx_document(spdx_doc))
+        spdx_utilities.add_signature_to_spdx_document(spdx_doc, signature)
 
     # write the spdx file.
     logging.info('writing file {}'.format(args.tvfile))

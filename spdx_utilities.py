@@ -3,8 +3,10 @@
 this file contains useful utility functions for manipulating SPDX SBOM data.
 """
 import codecs
+import hashlib
 import logging
 import pathlib
+import pickle
 
 from spdx.writers.tagvalue import write_document, InvalidDocumentError
 from spdx.parsers.loggers import ErrorMessages
@@ -76,8 +78,8 @@ def new_spdx_doc(name='SimpleSPDX', namespace='https://www.example.com/example')
     doc = Document()
     doc.version = Version(2, 1)
     doc.name = name
-    doc.spdx_id = "SPDXRef-DOCUMENT"
-    #  doc.comment = "Generated SPDX Document"
+    doc.spdx_id = 'SPDXRef-DOCUMENT'
+    doc.comment = 'Signature: none'
     doc.namespace = namespace  # "http://www.example.org/spdx"
     doc.data_license = License.from_identifier("CC0-1.0")
     #  doc.creation_info.add_creator(Person("Alice", "alice@example.com"))
@@ -168,3 +170,114 @@ def write_tv_file(doc, filename):
             doc.validate(messages)
             print("\n".join(messages.messages))
             raise
+
+
+def spdx_document_bytes_to_sign(spdx_doc):
+    """
+    I want to put the digital signature of the SBOM into the 'comment' field of the spdx document.
+    in order to do this, I need to make sure the comment field is not included when hashing the spdx
+    document in order to create it's unique hash.
+    :param spdx_doc:
+    :return:
+    """
+    doc_comment = spdx_doc.comment
+    spdx_doc.comment = None
+    sign_bytes = pickle.dumps(serialize_spdx_doc(spdx_doc))
+    spdx_doc.comment = doc_comment
+    return sign_bytes
+
+
+def serialize_spdx_doc(spdx_doc):
+    """
+    so this sucks.  I need to serialize the spdx doc so I can calculate a hash code, but I need it to look the same
+    every time.  this is a blune instrument to perform that conversion.  I don't care about deserialization, only
+    equality of the hashed value.
+    :param spdx_doc: the spdx document to serialize
+    :return: a string that kinda represents the spdx document.
+    """
+    result = str(spdx_doc.version)
+    result += str(spdx_doc.data_license)
+    result += spdx_doc.name
+    result += str(spdx_doc.license_list_version)
+    result += spdx_doc.spdx_id
+    result += str(spdx_doc.ext_document_references)
+    result += spdx_doc.namespace
+    # result += str(spdx_doc.creation_info)  # this causes problems  FIXME
+    result += str(spdx_doc.extracted_licenses)
+    result += str(spdx_doc.reviews)  # FIXME loop
+    result += str(spdx_doc.annotations)  # FIXME loop
+    result += str(spdx_doc.relationships)  # FIXME loop
+    result += str(spdx_doc.snippet)  # FIXME loop
+    for package in spdx_doc.packages:
+        result += str(package.name)
+        result += str(package.spdx_id)
+        result += str(package.version)
+        result += str(package.file_name)
+        result += str(package.supplier)
+        result += str(package.originator)
+        result += str(package.download_location)
+        result += str(package.files_analyzed)
+        result += str(package.homepage)
+        result += str(package.verif_code)
+        result += str(package.files_analyzed)
+        result += str(package.check_sum)
+        result += str(package.source_info)
+        result += str(package.license_declared)
+        result += str(package.license_comment)
+        for license_from_file in sorted(package.licenses_from_files):
+            result += str(license_from_file)
+        result += str(package.cr_text)
+        result += str(package.summary)
+        result += str(package.description)
+        result += str(package.comment)
+        result += str(package.attribution_text)
+        result += str(package.verif_exc_files)
+        result += str(package.pkg_ext_refs)
+        for file in sorted(package.files, key=lambda f: f.spdx_id):
+            result += str(file.name)
+            result += str(file.spdx_id)
+            result += str(file.comment)
+            for ft in sorted(file.file_types):
+                result += str(ft)
+            checksum_strings = []
+            for cs in file.chk_sums:
+                checksum_strings.append('{}: {}'.format(cs.identifier, cs.value))
+            for css in sorted(checksum_strings):
+                result += str(css)
+            result += str(file.conc_lics)
+            for lf in sorted(file.licenses_in_file):
+                result += str(lf)
+            result += str(file.license_comment)
+            result += str(file.copyright)
+            result += str(file.notice)
+            result += str(file.attribution_text)
+            for contributor in sorted(file.contributors):
+                result += str(contributor)
+            for dependency in sorted(file.dependencies):
+                result += str(dependency)
+            for artifact_of_project_name in sorted(file.artifact_of_project_name):
+                result += str(artifact_of_project_name)
+            for artifact_of_project_home in sorted(file.artifact_of_project_home):
+                result += str(artifact_of_project_home)
+            for artifact_of_project_uri in sorted(file.artifact_of_project_uri):
+                result += str(artifact_of_project_uri)
+    return result
+
+
+def get_hash_of_spdx_document(spdx_doc, hash_algorithm='sha512'):
+    hasher = hashlib.new(hash_algorithm)
+    hasher.update(spdx_document_bytes_to_sign(spdx_doc))
+    return hasher.digest()
+
+
+def get_digital_signature_of_spdx_document(spdx_doc):
+    if spdx_doc.comment is not None:
+        doc_comment = spdx_doc.comment.strip()
+        if doc_comment[0:10] == 'Signature:':
+            signature = doc_comment[10:].strip()
+            return signature
+    return None
+
+
+def add_signature_to_spdx_document(spdx_doc, signature):
+    spdx_doc.comment = 'Signature: {}'.format(signature)

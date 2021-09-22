@@ -5,6 +5,7 @@ this file contains useful utilities related to file integrity validation.
 import hashlib
 import os
 
+
 def files_in_dir(path, start='.'):
     """
     return a list of filenames found by walking the directory tree starting at path

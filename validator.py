@@ -8,6 +8,8 @@ import argparse
 import logging
 import os
 
+import signature_utilities
+import spdx_utilities
 from spdx_utilities import \
     add_checksum_to_spdx_file, \
     new_spdx_doc, \
@@ -23,12 +25,13 @@ def main():
     parser.add_argument('--debug', action='store_true', help='output API debug data')
     parser.add_argument('--tvfile', type=str, help='SBOM tag/value filename to write')
     parser.add_argument('--packagepath', type=str, help='path to base of package')
+    parser.add_argument('--publickey', type=str, help='path to rsa public key used for digital signature validation')
     args = parser.parse_args()
 
     if args.debug:
         logging.basicConfig(format='%(message)s', level=logging.DEBUG)
     else:
-        logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.WARNING)
+        logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
     if args.packagepath is None:
         logging.error('--packagepath must be supplied')
@@ -42,6 +45,10 @@ def main():
         logging.error('packagepath "{}" is not a directory.'.format(args.packagepath))
         exit(1)
     package_path = args.packagepath
+
+    rsa_public_key = None
+    if args.publickey is not None:
+        public_key = signature_utilities.read_ssh_public_key(args.publickey)
 
     logging.info('Enumerating files in {}...'.format(package_path))
     files = files_in_dir(package_path)
@@ -57,6 +64,16 @@ def main():
         logging.error('could not read tvfile {}!'.format(args.tvfile))
         exit(1)
 
+    if public_key is not None:
+        # validate signature
+        digest = spdx_utilities.get_hash_of_spdx_document(new_doc)
+        signature = spdx_utilities.get_digital_signature_of_spdx_document(new_doc)
+        if not signature_utilities.validate_signature(public_key, signature, digest):
+            print('Digital Signature Mismatch!')
+            logging.warning('Digital signature mismatch')
+            exit(13)
+        else:
+            logging.info('digital signature on SBOM file is good.  SBOM file appears authentic.')
     # get all files from all packages in the sbom into a list.
     sbom_files = []
     for package in new_doc.packages:
