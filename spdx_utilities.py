@@ -95,9 +95,10 @@ def probe_file(filename):
                     break
             if is_text:
                 return [FileType.OTHER, FileType.TEXT]
-            print(filename)
-            print(data)
-        return [FileType.BINARY, FileType.OTHER]
+            else:
+                logging.warning('probe_file({}) could not determine file type.'.format(filename))
+            return [FileType.BINARY, FileType.OTHER]
+    return []
 
 
 def new_spdx_doc(name='SimpleSPDX', namespace='https://www.example.com/example', toolname='unknown tool'):

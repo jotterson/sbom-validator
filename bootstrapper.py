@@ -67,7 +67,7 @@ def main():
 
     logging.info('Enumerating files...')
     files = files_in_dir(package_path)
-    logging.info('directory enumeration found {} files'.format(len(files)))
+    logging.info('Directory enumeration found {} files'.format(len(files)))
 
     spdx_doc = new_spdx_doc()
     spdx_pkg = new_spdx_pkg(spdx_id=new_spdx_id(), name='BaseApp', version='0.0.0')
@@ -94,12 +94,11 @@ def main():
         add_signature_to_spdx_document(spdx_doc, signature)
 
     # write the spdx file.
-    logging.info('writing file {}'.format(args.tvfile))
+    logging.info('Writing file {}'.format(args.tvfile))
     write_tv_file(spdx_doc, args.tvfile)
 
     # read the spdx file for basic verification
-    logging.info('reading file {}'.format(args.tvfile))
-
+    logging.info('Reading file {}'.format(args.tvfile))
     new_doc = read_tv_file(args.tvfile)
 
     if True:  # debug
@@ -112,19 +111,12 @@ def main():
             new_doc_data = serialize_spdx_doc(new_doc)
             signature = get_digital_signature_from_spdx_document(new_doc)
             if not signature_utilities.validate_signature(public_key, signature, new_doc_data):
-                print('Digital Signature Mismatch!')
-                logging.warning('Digital signature mismatch')
+                logging.error('Digital signature mismatch')
                 exit(13)
             else:
-                logging.info('Digital signature on SBOM file is good.  SBOM file appears authentic.')
+                logging.info('Digital signature on SBOM file is good.')
+        logging.info('SBOM file contains {} file entries'.format(len(new_doc.packages[0].files)))
 
-    if new_doc is not None:
-
-        logging.info('Found {} files'.format(len(new_doc.packages[0].files)))
-    else:
-        logging.error('could not read tvfile!')
-
-    logging.info('all done, bye bye.')
     exit(0)
 
 

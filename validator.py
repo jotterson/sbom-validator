@@ -48,16 +48,16 @@ def main():
 
     logging.info('Enumerating files in {}...'.format(package_path))
     files = files_in_dir(package_path)
-    logging.info('directory enumeration found {} files'.format(len(files)))
+    logging.info('Directory enumeration found {} files'.format(len(files)))
 
     # read the spdx file that will be used for validation
-    logging.info('reading file {}'.format(args.tvfile))
+    logging.info('Reading SBOM file {}'.format(args.tvfile))
 
     new_doc = read_tv_file(args.tvfile)
     if new_doc is not None:
-        logging.info('Found {} files'.format(len(new_doc.packages[0].files)))
+        logging.info('SBOM file contains {} file entries'.format(len(new_doc.packages[0].files)))
     else:
-        logging.error('could not read tvfile {}!'.format(args.tvfile))
+        logging.error('Could not read SBOM file {}!'.format(args.tvfile))
         exit(1)
 
     if public_key is not None:
@@ -65,11 +65,10 @@ def main():
         data = spdx_utilities.serialize_spdx_doc(new_doc)
         signature = spdx_utilities.get_digital_signature_from_spdx_document(new_doc)
         if not signature_utilities.validate_signature(public_key, signature, data):
-            print('Digital Signature Mismatch!')
-            logging.warning('Digital signature mismatch')
+            logging.error('Digital signature mismatch')
             exit(13)
         else:
-            logging.info('digital signature on SBOM file is good.  SBOM file appears authentic.')
+            logging.info('Digital signature on SBOM file is good.  SBOM file appears authentic.')
     # get all files from all packages in the sbom into a list.
     sbom_files = []
     for package in new_doc.packages:
@@ -96,13 +95,13 @@ def main():
     missing_files = 0
     for file, file_dict in sbom_file_name_map.items():
         if not file_dict.get('found_on_disk'):
-            print('Missing file! File {} was not found on disk.'.format(file))
+            logging.warning('Missing file! File {} was not found on disk.'.format(file))
             missing_files += 1
     # detect extra files
     extra_files = 0
     for file, file_dict in files_on_disk.items():
         if not file_dict.get('found_in_sbom'):
-            print('Extra file!   File {} was not found in the SBOM.'.format(file))
+            logging.info('Extra file!   File {} was not found in the SBOM.'.format(file))
             extra_files += 1
 
     # now compare checksums for all files that are both on disk and in the SBOM.
@@ -124,11 +123,11 @@ def main():
             # now compare the hashes
             if sbom_file_hash_value != disk_file_hash_value:
                 # danger will robinson!
-                print('Checksum mismatch! File {} {} checksum does not match the SBOM'.format(file, hash_algorithm))
+                logging.warning('Checksum mismatch! File {} {} checksum does not match the SBOM'.format(file, hash_algorithm))
                 mismatched_files += 1
 
     if missing_files != 0 or extra_files != 0 or mismatched_files != 0:
-        print('Package fails integrity testing.')
+        logging.warning('Package fails integrity testing.')
         exit(13)
 
     logging.info('Package integrity appears OK.')
