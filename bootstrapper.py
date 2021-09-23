@@ -11,13 +11,16 @@ import logging
 import os
 
 import signature_utilities
-import spdx_utilities
 from spdx_utilities import \
     add_checksum_to_spdx_file, \
+    add_signature_to_spdx_document, \
+    get_digital_signature_from_spdx_document, \
     new_spdx_doc, \
     new_spdx_file, \
     new_spdx_pkg, \
     read_tv_file, \
+    set_spdx_file_type, \
+    serialize_spdx_doc, \
     write_tv_file
 from validation_utilities import calculate_hash_for_file, files_in_dir
 
@@ -71,11 +74,13 @@ def main():
 
     # add all the discovered files to the package.
     for file in files:
+        full_path = '{}/{}'.format(package_path, file)
         spdx_file = new_spdx_file(filename=file, spdx_id=new_spdx_id())
         hash_names = ['sha1', 'sha256', 'sha512']
         for hash_name in hash_names:
-            hash_value = calculate_hash_for_file('{}/{}'.format(package_path, file), hash_name)
+            hash_value = calculate_hash_for_file(full_path, hash_name)
             add_checksum_to_spdx_file(spdx_file, hash_name.upper(), hash_value)
+        set_spdx_file_type(spdx_file, full_path)
         spdx_pkg.add_file(spdx_file)
 
     # update pkg verification code.
@@ -85,8 +90,8 @@ def main():
     # sign the spdx file if the private key was specified
     if private_key:
         signature = signature_utilities.create_signature(private_key,
-                                                         spdx_utilities.serialize_spdx_doc(spdx_doc))
-        spdx_utilities.add_signature_to_spdx_document(spdx_doc, signature)
+                                                         serialize_spdx_doc(spdx_doc))
+        add_signature_to_spdx_document(spdx_doc, signature)
 
     # write the spdx file.
     logging.info('writing file {}'.format(args.tvfile))
@@ -104,8 +109,8 @@ def main():
             public_key = None
         if public_key:
             # validate digital signature on sbom document data
-            new_doc_data = spdx_utilities.serialize_spdx_doc(new_doc)
-            signature = spdx_utilities.get_digital_signature_from_spdx_document(new_doc)
+            new_doc_data = serialize_spdx_doc(new_doc)
+            signature = get_digital_signature_from_spdx_document(new_doc)
             if not signature_utilities.validate_signature(public_key, signature, new_doc_data):
                 print('Digital Signature Mismatch!')
                 logging.warning('Digital signature mismatch')

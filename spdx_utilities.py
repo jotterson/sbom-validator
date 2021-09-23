@@ -27,6 +27,7 @@ map file extensions to SPDX file types.
 file_extension_to_spdx_file_type_mapping = {
     '.bat': [FileType.TEXT, FileType.APPLICATION, FileType.OTHER],
     '.class': [FileType.APPLICATION, FileType.BINARY],
+    '.conf': [FileType.TEXT, FileType.OTHER],
     '.css': [FileType.TEXT, FileType.APPLICATION, FileType.SOURCE],
     '.drl': [FileType.TEXT, FileType.APPLICATION, FileType.SOURCE],
     '.dtd': [FileType.TEXT, FileType.APPLICATION, FileType.SOURCE],
@@ -44,6 +45,7 @@ file_extension_to_spdx_file_type_mapping = {
     '.pdf': [FileType.IMAGE, FileType.OTHER],
     '.png': [FileType.IMAGE, FileType.OTHER],
     '.properties': [FileType.TEXT, FileType.OTHER],
+    '.sh': [FileType.TEXT, FileType.APPLICATION, FileType.OTHER],
     '.sql': [FileType.TEXT, FileType.APPLICATION, FileType.OTHER],
     '.svg': [FileType.IMAGE, FileType.OTHER],
     '.ttf': [FileType.IMAGE, FileType.OTHER],
@@ -65,11 +67,37 @@ def set_spdx_file_type(spdx_file, filename):
     :return:
     """
     file_type = pathlib.Path(filename).suffix.lower()
-    spdx_file_types = file_extension_to_spdx_file_type_mapping.get(file_type)
-    if spdx_file_types is None:
-        #  print(filename, file_type)  # indicate dict lookup failure for dev. purposes.
-        spdx_file_types = [FileType.OTHER]
+    if len(file_type) > 0:
+        spdx_file_types = file_extension_to_spdx_file_type_mapping.get(file_type)
+        if spdx_file_types is None:
+            #  print(filename, file_type)  # indicate dict lookup failure for dev. purposes.
+            spdx_file_types = [FileType.OTHER]
+    else:
+        spdx_file_types = probe_file(filename)
     spdx_file.file_types = spdx_file_types
+
+
+def probe_file(filename):
+    """
+    try to guess the SPDX file type based on analyzing a block of data from the file.
+    :param filename: the file to test
+    :return: a list of SPDX File Types
+    """
+    with open(filename, 'rb') as file:
+        data = file.read(128)
+        if len(data) > 0:
+            if data[0:3] == b'#!/':  # looks like a script file
+                return [FileType.APPLICATION, FileType.OTHER, FileType.TEXT]
+            is_text = True
+            for b in data:
+                if (b < 32 or b > 126) and b != 10 and b != 13:
+                    is_text = False
+                    break
+            if is_text:
+                return [FileType.OTHER, FileType.TEXT]
+            print(filename)
+            print(data)
+        return [FileType.BINARY, FileType.OTHER]
 
 
 def new_spdx_doc(name='SimpleSPDX', namespace='https://www.example.com/example', toolname='unknown tool'):
@@ -134,12 +162,9 @@ def new_spdx_file(filename, spdx_id, comment=None):
     :return: the SPDX File object
     """
     spdx_file = File(filename)
-    set_spdx_file_type(spdx_file, filename)
-    #  spdx_file.type = spdx_file_type(filename)
     spdx_file.spdx_id = spdx_id
     if comment:
         spdx_file.comment = comment
-    #  spdx_file.chk_sum = Algorithm("SHA1", "c537c5d99eca5333f23491d47ededd083fefb7ad")
     spdx_file.conc_lics = NoAssert()
     spdx_file.add_lics(NoAssert())
     spdx_file.copyright = NoAssert()

@@ -42,5 +42,3 @@ def calculate_hash_for_file(filename, hash_name='sha256'):
                 break
             hasher.update(block)
     return hasher.hexdigest()
-
-
