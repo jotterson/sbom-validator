@@ -1,4 +1,4 @@
-#!/bin/python3.9
+#!/usr/bin/env python3.9
 """
 This script generates (bootstraps) a SBOM file from existing data.
 This is used to get a quick stake in the ground with a usable SBOM file

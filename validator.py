@@ -1,4 +1,4 @@
-#!/bin/python3.9
+#!/usr/bin/env python3.9
 """
 validator.py -- this script compares a SBOM file with application files on disk.
 it will report missing files, additional files, and hash mismatches for matching files.
