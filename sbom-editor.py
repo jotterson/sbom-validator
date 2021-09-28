@@ -2,11 +2,34 @@
 """
 sbom_editor.py -- this script provides simple edit to file data in a SBOM file.
 """
+__author__ = 'J. B. Otterson'
+__copyright__ = """
+Copyright 2021, J. B. Otterson.
+Redistribution and use in source and binary forms, with or without modification, 
+are permitted provided that the following conditions are met:
+
+  1. Redistributions of source code must retain the above copyright notice, 
+     this list of conditions and the following disclaimer.
+  2. Redistributions in binary form must reproduce the above copyright notice, 
+     this list of conditions and the following disclaimer in the documentation 
+     and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE 
+OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+OF THE POSSIBILITY OF SUCH DAMAGE.
+"""
 
 import argparse
 import logging
 
-from asciimatics.widgets import Button, Divider, Frame, Layout, ListBox, Text, TextBox, Widget
+from asciimatics.widgets import Button, Divider, Frame, Layout, MultiColumnListBox, Text, Widget
 from asciimatics.scene import Scene
 from asciimatics.screen import Screen
 from asciimatics.exceptions import NextScene, ResizeScreenError, StopApplication
@@ -14,15 +37,16 @@ from asciimatics.exceptions import NextScene, ResizeScreenError, StopApplication
 import signature_utilities
 import spdx_utilities
 from spdx_utilities import add_signature_to_spdx_document, read_tv_file, serialize_spdx_doc, write_tv_file
-from spdx.utils import NoAssert, SPDXNone, UnKnown
+from spdx.utils import NoAssert, SPDXNone  # , UnKnown
 
 #        01234567890123
 MAGIC = '*BUILD-OUTPUT*'
 
-spdx_files_list_model = {}
-
 
 class SpdxFileFilesAsListModel(object):
+    """
+    Class presents a SPDX SBOM file as a ListBox data model.
+    """
     def __init__(self, filename, public_key=None, private_key=None):
         self.filename = filename
         self.public_key = public_key
@@ -45,27 +69,35 @@ class SpdxFileFilesAsListModel(object):
                 self.files_by_spdxid[file.spdx_id] = file
 
     def get_listbox_options(self):
-        summary = []
+        """
+        get a list of data to use to populate a list box
+        :return: a list of tuples of data
+        """
+        options = []
         for file in self.files:
-            summary.append(('{:<60} {}'.format(file.name, file.comment or ''), file.spdx_id))
-        return summary
+            options.append(([file.name, file.comment or ''], file.spdx_id))
+        return options
 
     def get_spdxfile(self, spdx_id):
+        """
+        find a SPDX file by its spdx_id
+        :param spdx_id: the spdx_id of the file sought
+        :return: the SPDX File object for the specfied file, or None if not found.
+        """
         file = self.files_by_spdxid.get(spdx_id)
         self.current_file = file
         return file
 
-    def get_current_file(self):
+    def get_current_file_DELETEME(self):
         if self.current_file is None:
             return None
-            # return {'name': '', 'address': '', 'phone': '', 'email': '', 'notes': ''}
         else:
             return self.get_spdxfile(self.current_file)
 
     def get_current_file_form_data(self):
         """
         this will create a dict with the data to edit from the SPDX File Object
-        :return: a dict
+        :return: a dict of field name/values to edit on a form
         """
         if self.current_file is None:
             data = {'name': '', 'comment': '', 'spdx_id': '', 'copyright': '', 'notice': ''}
@@ -85,9 +117,20 @@ class SpdxFileFilesAsListModel(object):
         return data
 
     def set_current_file(self, spdx_id):
+        """
+        set the current file object to be the file with the given spdx_id. used
+        to get the File selected by the ListBox
+        :param spdx_id: the file you seek
+        :return: None
+        """
         self.current_file = self.get_spdxfile(spdx_id)
 
     def update_current_file(self, data):
+        """
+        apply dialog edit changes to a File object
+        :param data: a dict of key/value pairs
+        :return: None
+        """
         if self.current_file is not None:
             self.current_file.comment = data.get('comment')
             copyright_text = data.get('copyright') or ''
@@ -98,6 +141,10 @@ class SpdxFileFilesAsListModel(object):
             self.current_file.notice = data.get('notice')
 
     def save_spdx_file(self):
+        """
+        save the spdx file changes
+        :return: None
+        """
         # sign the spdx file if the private key was specified
         if self.private_key:
             signature = signature_utilities.create_signature(self.private_key,
@@ -108,10 +155,13 @@ class SpdxFileFilesAsListModel(object):
 
 
 class ListView(Frame):
+    """
+    this class is the UI view of the list of SBOM Files
+    """
     def __init__(self, screen, model):
         super(ListView, self).__init__(screen,
-                                       screen.height * 2 // 3,
-                                       screen.width * 2 // 3,
+                                       screen.height * 3 // 4,
+                                       screen.width * 3 // 4,
                                        on_load=self._reload_list,
                                        hover_focus=True,
                                        can_scroll=False,
@@ -119,13 +169,15 @@ class ListView(Frame):
         self._model = model
 
         # Create the form for displaying the list of files.
-        self._list_view = ListBox(
+        self._list_view = MultiColumnListBox(
             Widget.FILL_FRAME,
-            model.get_listbox_options(),
+            columns=[0, 16],
+            options=model.get_listbox_options(),
+            titles=['File Name', 'Comment'],
             name='files',
             add_scroll_bar=True,
             on_change=self._on_pick,
-            on_select=self._toggle_build_output)  # self._edit)
+            on_select=self._toggle_build_output)
         self._toggle_button = Button('Toggle Build Output', self._toggle_build_output)
         self._edit_button = Button('Edit', self._edit)
 
@@ -181,8 +233,8 @@ class ListView(Frame):
 class SpdxFileView(Frame):
     def __init__(self, screen, model):
         super(SpdxFileView, self).__init__(screen,
-                                           20,  # screen.height * 2 // 3,
-                                           60,  # screen.width * 2 // 3,
+                                           10,
+                                           80,
                                            hover_focus=True,
                                            can_scroll=False,
                                            title='SBOM File Details',
@@ -252,6 +304,7 @@ def main():
     else:
         private_key = None
 
+    # noinspection PyGlobalUndefined
     global spdx_files_list_model
     spdx_files_list_model = SpdxFileFilesAsListModel(filename=args.tvfile,
                                                      public_key=public_key,
