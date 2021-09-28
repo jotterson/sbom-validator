@@ -14,8 +14,13 @@ The intended use cases are as follows:
 
 ## What's Here
 
-* bootstrapper.py -- create the initial SBOM.  Though this could be used later in the build process (e.g. post-build) that is not the intention.  The use case for this utility is to run it once, then edit the SBOM file as the dependencies change.
-* validator.py -- this validates an application's files on disk by comparing file presence and sha256 hash values.  Missing/extra files are detected and reported, as are hash mis-matches.
+* `bootstrapper.py` -- create the initial SBOM.  Though this could be used later in the build process (e.g. post-build) that is not the intention.  The use case for this utility is to run it once, then edit the SBOM file as the dependencies change.
+* `sbom-editor.py` -- a simple TUI edit tool allows the "BUILD OUTPUT"
+  option to be set on SBOM files.  Perhaps more features will be
+  added later, this is what I needed right now.
+* `validator.py` -- this validates an application's files on disk by
+  comparing file presence and sha256 hash values.  Missing/extra
+  files are detected and reported, as are hash mis-matches.
 
 ## Caveats
 
