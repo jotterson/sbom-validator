@@ -83,6 +83,19 @@ file_extension_to_spdx_file_type_mapping = {
 }
 
 
+def guess_spdx_file_type_from_extension(filename):
+    """
+    guess a SPDX file type from a file name extension;
+    :param filename: the filename to examine.
+    :return:
+    """
+    file_type = pathlib.Path(filename).suffix.lower()
+    if len(file_type) > 0:
+        return file_extension_to_spdx_file_type_mapping.get(file_type) or [FileType.OTHER]
+    else:
+        return None
+
+
 def set_spdx_file_type(spdx_file, filename):
     """
     get a SPDX file type from a file name;
@@ -90,13 +103,8 @@ def set_spdx_file_type(spdx_file, filename):
     :param filename: the filename to examine.
     :return:
     """
-    file_type = pathlib.Path(filename).suffix.lower()
-    if len(file_type) > 0:
-        spdx_file_types = file_extension_to_spdx_file_type_mapping.get(file_type)
-        if spdx_file_types is None:
-            #  print(filename, file_type)  # indicate dict lookup failure for dev. purposes.
-            spdx_file_types = [FileType.OTHER]
-    else:
+    spdx_file_types = guess_spdx_file_type_from_extension(filename)
+    if spdx_file_types is None:
         spdx_file_types = probe_file(filename)
     spdx_file.file_types = spdx_file_types
 
@@ -109,19 +117,23 @@ def probe_file(filename):
     """
     with open(filename, 'rb') as file:
         data = file.read(128)
-        if len(data) > 0:
-            if data[0:3] == b'#!/':  # looks like a script file
-                return [FileType.APPLICATION, FileType.OTHER, FileType.TEXT]
-            is_text = True
-            for b in data:
-                if (b < 32 or b > 126) and b != 10 and b != 13:
-                    is_text = False
-                    break
-            if is_text:
-                return [FileType.OTHER, FileType.TEXT]
-            else:
-                logging.warning('probe_file({}) could not determine file type.'.format(filename))
-            return [FileType.BINARY, FileType.OTHER]
+        return guess_spdx_file_type_from_data(data)
+
+
+def guess_spdx_file_type_from_data(data):
+    if len(data) > 0:
+        if data[0:3] == b'#!/':  # looks like a script file
+            return [FileType.APPLICATION, FileType.OTHER, FileType.TEXT]
+        is_text = True
+        for b in data[0:128]:
+            if (b < 32 or b > 126) and b != 10 and b != 13:
+                is_text = False
+                break
+        if is_text:
+            return [FileType.OTHER, FileType.TEXT]
+        else:
+            logging.warning('guess_spdx_file_type_from_data() could not guess.')
+        return [FileType.BINARY, FileType.OTHER]
     return []
 
 

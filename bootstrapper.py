@@ -30,14 +30,18 @@ OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
 import argparse
+import hashlib
 import logging
 import os
+from zipfile import ZipFile
 
 import signature_utilities
 from spdx_utilities import \
     add_checksum_to_spdx_file, \
     add_signature_to_spdx_document, \
     get_digital_signature_from_spdx_document, \
+    guess_spdx_file_type_from_data, \
+    guess_spdx_file_type_from_extension, \
     new_spdx_doc, \
     new_spdx_file, \
     new_spdx_pkg, \
@@ -56,45 +60,13 @@ def new_spdx_id():
     return 'SPDXRef-{:06d}'.format(spdx_id_counter)
 
 
-# noinspection DuplicatedCode
-def main():
-    parser = argparse.ArgumentParser(description='Bootstrap SBOM file')
-    parser.add_argument('--debug', action='store_true', help='output API debug data')
-    parser.add_argument('--tvfile', type=str, help='SBOM tag/value filename to write')
-    parser.add_argument('--packagepath', type=str, help='path to base of package')
-    parser.add_argument('--privatekey', type=str, help='private key for signing SBOM')
-    args = parser.parse_args()
+def package_path_to_spdx_doc(package_path):
+    spdx_doc = new_spdx_doc()
+    spdx_pkg = new_spdx_pkg(spdx_id=new_spdx_id(), name='Example', version='0.0.0')
 
-    if args.debug:
-        logging.basicConfig(format='%(message)s', level=logging.DEBUG)
-    else:
-        logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
-
-    if args.packagepath is None:
-        logging.error('--packagepath must be supplied')
-        exit(1)
-
-    if args.tvfile is None:
-        logging.error('--tvfile must be present')
-        exit(1)
-
-    if args.privatekey:
-        private_key = signature_utilities.read_ssh_private_key(args.privatekey)
-    else:
-        private_key = None
-
-    if not os.path.isdir(args.packagepath):
-        logging.error('packagepath "{}" is not a directory.'.format(args.packagepath))
-        exit(1)
-    package_path = args.packagepath
-
-    logging.info('Enumerating files...')
+    logging.info('Enumerating files at {}...'.format(package_path))
     files = files_in_dir(package_path)
     logging.info('Directory enumeration found {} files'.format(len(files)))
-
-    spdx_doc = new_spdx_doc()
-    spdx_pkg = new_spdx_pkg(spdx_id=new_spdx_id(), name='BaseApp', version='0.0.0')
-
     # add all the discovered files to the package.
     for file in files:
         full_path = '{}/{}'.format(package_path, file)
@@ -109,6 +81,80 @@ def main():
     # update pkg verification code.
     spdx_pkg.verif_code = spdx_pkg.calc_verif_code()
     spdx_doc.add_package(spdx_pkg)
+    return spdx_doc
+
+
+def package_zip_to_spdx_doc(package_zip):
+    spdx_doc = new_spdx_doc()
+    spdx_pkg = new_spdx_pkg(spdx_id=new_spdx_id(), name='Example', version='0.0.0')
+    logging.info('Enumerating files in {}...'.format(package_zip))
+    with ZipFile(package_zip, 'r') as zipfile:
+        namelist = zipfile.namelist()
+        files = list(filter(lambda name: not name.endswith('/'), namelist))
+        logging.info('Zipfile contains {} files'.format(len(files)))
+        for file in files:
+            spdx_file = new_spdx_file(filename=file, spdx_id=new_spdx_id())
+            data = zipfile.read(file)
+            hash_names = ['sha1', 'sha256', 'sha512']
+            for hash_name in hash_names:
+                hasher = hashlib.new(hash_name)
+                hasher.update(data)
+                add_checksum_to_spdx_file(spdx_file, hash_name.upper(), hasher.hexdigest())
+            spdx_file_types = guess_spdx_file_type_from_extension(file)
+            if spdx_file_types is None:
+                spdx_file_types = guess_spdx_file_type_from_data(data)
+            spdx_file.file_types = spdx_file_types
+            spdx_pkg.add_file(spdx_file)
+
+    # update pkg verification code.
+    spdx_pkg.verif_code = spdx_pkg.calc_verif_code()
+    spdx_doc.add_package(spdx_pkg)
+    return spdx_doc
+
+
+# noinspection DuplicatedCode
+def main():
+    parser = argparse.ArgumentParser(description='Bootstrap SBOM file')
+    parser.add_argument('--debug', action='store_true', help='output API debug data')
+    parser.add_argument('--tvfile', type=str, help='SBOM tag/value filename to write')
+    parser.add_argument('--packagepath', type=str, help='path to base of package')
+    parser.add_argument('--packagezip', type=str, help='path to package zipfile')
+    parser.add_argument('--privatekey', type=str, help='private key for signing SBOM')
+    args = parser.parse_args()
+
+    if args.debug:
+        logging.basicConfig(format='%(message)s', level=logging.DEBUG)
+    else:
+        logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
+
+    if args.packagepath is None and args.packagezip is None:
+        logging.error('--packagepath or --packagezip must be supplied')
+        exit(1)
+
+    if args.packagepath is not None and args.packagezip is not None:
+        logging.error('only one of --packagepath or --packagezip must be supplied')
+        exit(1)
+
+    if args.tvfile is None:
+        logging.error('--tvfile must be specified')
+        exit(1)
+
+    if args.privatekey:
+        private_key = signature_utilities.read_ssh_private_key(args.privatekey)
+    else:
+        private_key = None
+
+    if args.packagepath is not None:
+        if not os.path.isdir(args.packagepath):
+            logging.error('packagepath "{}" is not a directory.'.format(args.packagepath))
+            exit(1)
+        spdx_doc = package_path_to_spdx_doc(args.packagepath)
+
+    if args.packagezip is not None:
+        if not os.path.exists(args.packagezip):
+            logging.error('packagezip {} not found'.format(args.packagezip))
+            exit(1)
+        spdx_doc = package_zip_to_spdx_doc(args.packagezip)
 
     # sign the spdx file if the private key was specified
     if private_key:
