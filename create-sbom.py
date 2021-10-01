@@ -61,8 +61,12 @@ def new_spdx_id():
 
 
 def package_path_to_spdx_doc(package_path):
-    spdx_doc = new_spdx_doc()
-    spdx_pkg = new_spdx_pkg(spdx_id=new_spdx_id(), name='Example', version='0.0.0')
+    spdx_doc = new_spdx_doc(toolname='create-sbom.py')
+    package_name = package_path
+    if package_name[-1] == '/':
+        package_name = package_name[0:-1]
+    _, package_name = os.path.split(package_name)
+    spdx_pkg = new_spdx_pkg(spdx_id=new_spdx_id(), name='Example', version='0.0.0', file_name=package_name)
 
     logging.info('Enumerating files at {}...'.format(package_path))
     files = files_in_dir(package_path)
@@ -85,8 +89,9 @@ def package_path_to_spdx_doc(package_path):
 
 
 def package_zip_to_spdx_doc(package_zip):
-    spdx_doc = new_spdx_doc()
-    spdx_pkg = new_spdx_pkg(spdx_id=new_spdx_id(), name='Example', version='0.0.0')
+    spdx_doc = new_spdx_doc(toolname='create-sbom.py')
+    _, package_name = os.path.split(package_zip)
+    spdx_pkg = new_spdx_pkg(spdx_id=new_spdx_id(), name=package_name, version='0.0.0', file_name=package_name)
     logging.info('Enumerating files in {}...'.format(package_zip))
     with ZipFile(package_zip, 'r') as zipfile:
         namelist = zipfile.namelist()

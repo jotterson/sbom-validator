@@ -56,8 +56,9 @@ class SpdxFileFilesAsListModel(object):
             # validate signature
             data = spdx_utilities.serialize_spdx_doc(self.spdx_doc)
             signature = spdx_utilities.get_digital_signature_from_spdx_document(self.spdx_doc)
-            if not signature_utilities.validate_signature(public_key, signature, data):
-                raise RuntimeError('Digital signature mismatch')
+            if signature is not None:
+                if not signature_utilities.validate_signature(public_key, signature, data):
+                    raise RuntimeError('Digital signature mismatch')
         files = []
         for package in self.spdx_doc.packages:
             files.extend(package.files)
@@ -88,12 +89,6 @@ class SpdxFileFilesAsListModel(object):
         self.current_file = file
         return file
 
-    def get_current_file_DELETEME(self):
-        if self.current_file is None:
-            return None
-        else:
-            return self.get_spdxfile(self.current_file)
-
     def get_current_file_form_data(self):
         """
         this will create a dict with the data to edit from the SPDX File Object
@@ -114,6 +109,13 @@ class SpdxFileFilesAsListModel(object):
                     'copyright': copyright_text,
                     'notice': self.current_file.notice,
                     }
+            for hash_name in ['SHA1', 'SHA256', 'SHA512']:
+                hash_value = self.current_file.get_chksum(hash_name)
+                if hash_value is not None:
+                    value = hash_value.value
+                else:
+                    value = ''
+                data[hash_name.lower()] = value
         return data
 
     def set_current_file(self, spdx_id):
@@ -214,10 +216,14 @@ class ListView(Frame):
 
     def _toggle_build_output(self):
         if self._model.current_file is not None:
-            if self._model.current_file.comment == MAGIC:
-                self._model.current_file.comment = None
-            else:
+            if self._model.current_file.comment is None:
                 self._model.current_file.comment = MAGIC
+            elif self._model.current_file.comment.startswith(MAGIC):
+                self._model.current_file.comment = self._model.current_file.comment[len(MAGIC):]
+                if len(self._model.current_file.comment) == 0:
+                    self._model.current_file.comment = None
+            else:
+                self._model.current_file.comment = MAGIC + self._model.current_file.comment
         self.save()
         self._reload_list(self._model.current_file.spdx_id)
 
@@ -233,8 +239,8 @@ class ListView(Frame):
 class SpdxFileView(Frame):
     def __init__(self, screen, model):
         super(SpdxFileView, self).__init__(screen,
-                                           10,
-                                           80,
+                                           11,
+                                           100,
                                            hover_focus=True,
                                            can_scroll=False,
                                            title='SBOM File Details',
@@ -245,6 +251,9 @@ class SpdxFileView(Frame):
         self.add_layout(layout)
         layout.add_widget(Text('Name:', 'name', readonly=True))
         layout.add_widget(Text('SPDXID:', 'spdx_id', readonly=True))
+        layout.add_widget(Text('SHA1:', 'sha1', readonly=True))
+        layout.add_widget(Text('SHA256:', 'sha256', readonly=True))
+        layout.add_widget(Text('SHA512:', 'sha512', readonly=True))
         layout.add_widget(Text('Comment:', 'comment'))
         layout.add_widget(Text('Copyright:', 'copyright'))
         layout.add_widget(Text('Notice:', 'notice'))

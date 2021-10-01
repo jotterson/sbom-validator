@@ -158,19 +158,21 @@ def new_spdx_doc(name='SimpleSPDX', namespace='https://www.example.com/example',
     return doc
 
 
-def new_spdx_pkg(spdx_id, name, version):
+def new_spdx_pkg(spdx_id, name, version, file_name=None):
     """
     create a new SPDX package object
     :param spdx_id:
     :param name:
     :param version:
+    :param file_name: a file name to associate with the Package.
     :return: the new Package object
     """
     # Package
     package = Package()
     package.name = name
     package.version = version
-    #  package.file_name = "twt.jar"
+    if file_name is not None:
+        package.file_name = file_name
     package.spdx_id = spdx_id
     package.download_location = NoAssert()  # "NOASSERTION"
     #  package.homepage = SPDXNone()
