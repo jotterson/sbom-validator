@@ -108,6 +108,8 @@ def package_zip_to_spdx_doc(package_zip):
             spdx_file_types = guess_spdx_file_type_from_extension(file)
             if spdx_file_types is None:
                 spdx_file_types = guess_spdx_file_type_from_data(data)
+            if spdx_file_types is None or len(spdx_file_types) == 0:
+                logging.error('bad... {}'.format(file))
             spdx_file.file_types = spdx_file_types
             spdx_pkg.add_file(spdx_file)
 
@@ -121,10 +123,10 @@ def package_zip_to_spdx_doc(package_zip):
 def main():
     parser = argparse.ArgumentParser(description='Bootstrap SBOM file')
     parser.add_argument('--debug', action='store_true', help='output API debug data')
-    parser.add_argument('--tvfile', type=str, help='SBOM tag/value filename to write')
-    parser.add_argument('--packagepath', type=str, help='path to base of package')
-    parser.add_argument('--packagezip', type=str, help='path to package zipfile')
-    parser.add_argument('--privatekey', type=str, help='private key for signing SBOM')
+    parser.add_argument('--sbom-file', type=str, help='SBOM tag/value filename to write')
+    parser.add_argument('--package-path', type=str, help='path to base of package')
+    parser.add_argument('--package-zip', type=str, help='path to package zipfile')
+    parser.add_argument('--private-key', type=str, help='private key for signing SBOM')
     args = parser.parse_args()
 
     if args.debug:
@@ -132,34 +134,36 @@ def main():
     else:
         logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-    if args.packagepath is None and args.packagezip is None:
-        logging.error('--packagepath or --packagezip must be supplied')
+    if args.package_path is None and args.package_zip is None:
+        logging.error('--package-path or --package-zip must be supplied')
         exit(1)
 
-    if args.packagepath is not None and args.packagezip is not None:
-        logging.error('only one of --packagepath or --packagezip must be supplied')
+    if args.package_path is not None and args.package_zip is not None:
+        logging.error('only one of --package-path or --package-zip must be supplied')
         exit(1)
 
-    if args.tvfile is None:
-        logging.error('--tvfile must be specified')
+    if args.sbom_file is None:
+        logging.error('--sbom-file must be specified')
         exit(1)
 
-    if args.privatekey:
-        private_key = signature_utilities.read_ssh_private_key(args.privatekey)
+    if args.private_key:
+        private_key = signature_utilities.read_ssh_private_key(args.private_key)
     else:
         private_key = None
 
-    if args.packagepath is not None:
-        if not os.path.isdir(args.packagepath):
-            logging.error('packagepath "{}" is not a directory.'.format(args.packagepath))
-            exit(1)
-        spdx_doc = package_path_to_spdx_doc(args.packagepath)
+    spdx_doc = None
 
-    if args.packagezip is not None:
-        if not os.path.exists(args.packagezip):
-            logging.error('packagezip {} not found'.format(args.packagezip))
+    if args.package_path is not None:
+        if not os.path.isdir(args.package_path):
+            logging.error('package-path "{}" is not a directory.'.format(args.package_path))
             exit(1)
-        spdx_doc = package_zip_to_spdx_doc(args.packagezip)
+        spdx_doc = package_path_to_spdx_doc(args.package_path)
+
+    if args.package_zip is not None:
+        if not os.path.exists(args.package_zip):
+            logging.error('package-zip {} not found'.format(args.package_zip))
+            exit(1)
+        spdx_doc = package_zip_to_spdx_doc(args.package_zip)
 
     # sign the spdx file if the private key was specified
     if private_key:
@@ -168,16 +172,16 @@ def main():
         add_signature_to_spdx_document(spdx_doc, signature)
 
     # write the spdx file.
-    logging.info('Writing file {}'.format(args.tvfile))
-    write_tv_file(spdx_doc, args.tvfile)
+    logging.info('Writing file {}'.format(args.sbom_file))
+    write_tv_file(spdx_doc, args.sbom_file)
 
     # read the spdx file for basic verification
-    logging.info('Reading file {}'.format(args.tvfile))
-    new_doc = read_tv_file(args.tvfile)
+    logging.info('Reading file {}'.format(args.sbom_file))
+    new_doc = read_tv_file(args.sbom_file)
 
     if True:  # debug
-        if args.privatekey:
-            public_key = signature_utilities.read_ssh_public_key(args.privatekey + '.pub')
+        if args.private_key:
+            public_key = signature_utilities.read_ssh_public_key(args.private_key + '.pub')
         else:
             public_key = None
         if public_key:

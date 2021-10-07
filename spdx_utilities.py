@@ -121,6 +121,11 @@ def probe_file(filename):
 
 
 def guess_spdx_file_type_from_data(data):
+    """
+    guess a file's SPDX file type by looking at a little bit of data
+    :param data: a byte list to inspect
+    :return: a list of SPDX File Types
+    """
     if len(data) > 0:
         if data[0:3] == b'#!/':  # looks like a script file
             return [FileType.APPLICATION, FileType.OTHER, FileType.TEXT]
@@ -132,9 +137,9 @@ def guess_spdx_file_type_from_data(data):
         if is_text:
             return [FileType.OTHER, FileType.TEXT]
         else:
-            logging.warning('guess_spdx_file_type_from_data() could not guess.')
-        return [FileType.BINARY, FileType.OTHER]
-    return []
+            #  logging.warning('guess_spdx_file_type_from_data() could not guess.')
+            return [FileType.BINARY, FileType.OTHER]
+    return [FileType.BINARY, FileType.OTHER]
 
 
 def new_spdx_doc(name='SimpleSPDX', namespace='https://www.example.com/example', toolname='unknown tool'):

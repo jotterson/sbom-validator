@@ -28,6 +28,7 @@ OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import argparse
 import logging
+import os
 
 from asciimatics.widgets import Button, Divider, Frame, Layout, MultiColumnListBox, Text, Widget
 from asciimatics.scene import Scene
@@ -179,8 +180,9 @@ class ListView(Frame):
             name='files',
             add_scroll_bar=True,
             on_change=self._on_pick,
-            on_select=self._toggle_build_output)
-        self._toggle_button = Button('Toggle Build Output', self._toggle_build_output)
+            on_select=self._toggle_file)
+        self._toggle_file_button = Button('Toggle File', self._toggle_file)
+        self._toggle_dir_button = Button('Toggle Dir', self._toggle_dir)
         self._edit_button = Button('Edit', self._edit)
 
         if self._model.current_file is not None:
@@ -189,12 +191,13 @@ class ListView(Frame):
         self.add_layout(layout)
         layout.add_widget(self._list_view)
         layout.add_widget(Divider())
-        layout2 = Layout([1, 1, 1, 1])
+        layout2 = Layout([1, 1, 1, 1, 1])
         self.add_layout(layout2)
-        layout2.add_widget(self._toggle_button, 0)
-        layout2.add_widget(self._edit_button, 1)
-        layout2.add_widget(Button('Cancel', self._quit), 2)
-        layout2.add_widget(Button('Save', self._save_button_action), 3)
+        layout2.add_widget(self._toggle_file_button, 0)
+        layout2.add_widget(self._toggle_dir_button, 1)
+        layout2.add_widget(self._edit_button, 2)
+        layout2.add_widget(Button('Cancel', self._quit), 3)
+        layout2.add_widget(Button('Save', self._save_button_action), 4)
         self.fix()
         self._on_pick()
 
@@ -204,7 +207,8 @@ class ListView(Frame):
             spdx_file = self._model.get_spdxfile(self._list_view.value)
 
         self._edit_button.disabled = spdx_file is None
-        self._toggle_button.disabled = spdx_file is None
+        self._toggle_file_button.disabled = spdx_file is None
+        self._toggle_dir_button.disabled = spdx_file is None
 
     def _reload_list(self, new_value=None):
         self._list_view.options = self._model.get_listbox_options()
@@ -214,7 +218,7 @@ class ListView(Frame):
         self.save()
         raise NextScene('Edit File')
 
-    def _toggle_build_output(self):
+    def _toggle_file(self):
         if self._model.current_file is not None:
             if self._model.current_file.comment is None:
                 self._model.current_file.comment = MAGIC
@@ -227,6 +231,23 @@ class ListView(Frame):
         self.save()
         self._reload_list(self._model.current_file.spdx_id)
 
+    def _toggle_dir(self):
+        if self._model.current_file is not None:
+            filename = self._model.current_file.name
+            dir, name = os.path.split(filename)
+            for file in self._model.files:
+                file_dir, file_name = os.path.split(file.name)
+                if file_dir == dir:  # same directory!
+                    if file.comment is None or len(file.comment) == 0:
+                        file.comment = MAGIC
+                    elif file.comment.startswith(MAGIC):
+                        file.comment = file.comment[len(MAGIC):]
+                    else:
+                        file.comment = MAGIC + file.comment
+        self.save()
+        self._reload_list(self._model.current_file.spdx_id)
+
+
     def _save_button_action(self):
         self._model.save_spdx_file()
         raise StopApplication('User pressed save')
@@ -237,6 +258,9 @@ class ListView(Frame):
 
 
 class SpdxFileView(Frame):
+    """
+    class provides a form to edit some SPDX File metadata
+    """
     def __init__(self, screen, model):
         super(SpdxFileView, self).__init__(screen,
                                            11,
@@ -289,9 +313,9 @@ def run_tui(screen, scene):
 def main():
     parser = argparse.ArgumentParser(description='Bootstrap SBOM file')
     parser.add_argument('--debug', action='store_true', help='output API debug data')
-    parser.add_argument('--tvfile', type=str, help='SBOM tag/value filename to write')
-    parser.add_argument('--publickey', type=str, help='path to rsa public key used for digital signature validation')
-    parser.add_argument('--privatekey', type=str, help='private key for signing SBOM')
+    parser.add_argument('--sbom-file', type=str, help='SBOM tag/value filename to write')
+    parser.add_argument('--public-key', type=str, help='path to rsa public key used for digital signature validation')
+    parser.add_argument('--private-key', type=str, help='private key for signing SBOM')
     args = parser.parse_args()
 
     if args.debug:
@@ -299,23 +323,23 @@ def main():
     else:
         logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-    if args.tvfile is None:
-        logging.error('--tvfile must be present')
+    if args.sbom_file is None:
+        logging.error('--sbom-file must be present')
         exit(1)
 
-    if args.publickey is not None:
-        public_key = signature_utilities.read_ssh_public_key(args.publickey)
+    if args.public_key is not None:
+        public_key = signature_utilities.read_ssh_public_key(args.public_key)
     else:
         public_key = None
 
-    if args.privatekey:
-        private_key = signature_utilities.read_ssh_private_key(args.privatekey)
+    if args.private_key:
+        private_key = signature_utilities.read_ssh_private_key(args.private_key)
     else:
         private_key = None
 
     # noinspection PyGlobalUndefined
     global spdx_files_list_model
-    spdx_files_list_model = SpdxFileFilesAsListModel(filename=args.tvfile,
+    spdx_files_list_model = SpdxFileFilesAsListModel(filename=args.sbom_file,
                                                      public_key=public_key,
                                                      private_key=private_key)
     last_scene = None

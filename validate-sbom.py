@@ -41,6 +41,12 @@ from validation_utilities import calculate_hash_for_file, files_in_dir
 
 
 def validate_package_path(package_path, sbom_files):
+    """
+    validate a package installed on dis.
+    :param package_path: the path to the package files
+    :param sbom_files: a list of SBOM files to compare to
+    :return: True if package passes integrity verification.
+    """
     logging.info('Enumerating files in {}...'.format(package_path))
     files = files_in_dir(package_path)
     logging.info('Directory enumeration found {} files'.format(len(files)))
@@ -107,6 +113,12 @@ def validate_package_path(package_path, sbom_files):
 
 
 def validate_package_zip(package_zip, sbom_files):
+    """
+    validate a package that is contained in a zip file.
+    :param package_zip: the path to the package zip file
+    :param sbom_files: a list of SBOM files to compare to
+    :return: True if package passes integrity verification.
+    """
     logging.info('Enumerating files in {}...'.format(package_zip))
     with ZipFile(package_zip, 'r') as zipfile:
         namelist = zipfile.namelist()
@@ -165,8 +177,8 @@ def validate_package_zip(package_zip, sbom_files):
                 # now compare the hashes
                 if sbom_file_hash_value != disk_file_hash_value:
                     # danger will robinson!
-                    logging.warning('Checksum mismatch! File {} {} checksum does not match the SBOM'.format(file,
-                                                                                                            hash_algorithm))
+                    logging.warning('Checksum mismatch! ' +
+                                    'File {} {} checksum does not match the SBOM'.format(file, hash_algorithm))
                     mismatched_files += 1
 
         if missing_files != 0 or extra_files != 0 or mismatched_files != 0:
@@ -181,10 +193,10 @@ def validate_package_zip(package_zip, sbom_files):
 def main():
     parser = argparse.ArgumentParser(description='Bootstrap SBOM file')
     parser.add_argument('--debug', action='store_true', help='output API debug data')
-    parser.add_argument('--tvfile', type=str, help='SBOM tag/value filename to write')
-    parser.add_argument('--packagepath', type=str, help='path to base of package')
-    parser.add_argument('--packagezip', type=str, help='path to package zipfile')
-    parser.add_argument('--publickey', type=str, help='path to rsa public key used for digital signature validation')
+    parser.add_argument('--sbom-file', type=str, help='SBOM tag/value filename to write')
+    parser.add_argument('--package-path', type=str, help='path to base of package')
+    parser.add_argument('--package-zip', type=str, help='path to package zipfile')
+    parser.add_argument('--public-key', type=str, help='path to rsa public key used for digital signature validation')
     args = parser.parse_args()
 
     if args.debug:
@@ -192,47 +204,47 @@ def main():
     else:
         logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-    if args.packagepath is None and args.packagezip is None:
-        logging.error('--packagepath or --packagezip must be supplied')
+    if args.package_path is None and args.package_zip is None:
+        logging.error('--package-path or --package-zip must be supplied')
         exit(1)
 
-    if args.packagepath is not None and args.packagezip is not None:
-        logging.error('only one of --packagepath or --packagezip must be supplied')
+    if args.package_path is not None and args.package_zip is not None:
+        logging.error('only one of --package-path or --package-zip must be supplied')
         exit(1)
 
-    if args.tvfile is None:
-        logging.error('--tvfile must be present')
+    if args.sbom_file is None:
+        logging.error('--sbom-file must be present')
         exit(1)
 
-    if args.packagepath is not None:
-        if not os.path.isdir(args.packagepath):
-            logging.error('packagepath "{}" is not a directory.'.format(args.packagepath))
+    if args.package_path is not None:
+        if not os.path.isdir(args.package_path):
+            logging.error('package-path "{}" is not a directory.'.format(args.package_path))
             exit(1)
-        package_path = args.packagepath
+        package_path = args.package_path
     else:
         package_path = None
 
-    if args.packagezip is not None:
-        if not os.path.exists(args.packagezip):
-            logging.error('packagezip {} not found'.format(args.packagezip))
+    if args.package_zip is not None:
+        if not os.path.exists(args.package_zip):
+            logging.error('package-zip {} not found'.format(args.package_zip))
             exit(1)
-        package_zip = args.packagezip
+        package_zip = args.package_zip
     else:
         package_zip = None
 
-    if args.publickey is not None:
-        public_key = signature_utilities.read_ssh_public_key(args.publickey)
+    if args.public_key is not None:
+        public_key = signature_utilities.read_ssh_public_key(args.public_key)
     else:
         public_key = None
 
     # read the spdx file that will be used for validation
-    logging.info('Reading SBOM file {}'.format(args.tvfile))
+    logging.info('Reading SBOM file {}'.format(args.sbom_file))
 
-    new_doc = read_tv_file(args.tvfile)
+    new_doc = read_tv_file(args.sbom_file)
     if new_doc is not None:
         logging.info('SBOM file contains {} file entries'.format(len(new_doc.packages[0].files)))
     else:
-        logging.error('Could not read SBOM file {}!'.format(args.tvfile))
+        logging.error('Could not read SBOM file {}!'.format(args.sbom_file))
         exit(1)
 
     if public_key is not None:

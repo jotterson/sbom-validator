@@ -30,6 +30,7 @@ import hashlib
 import os
 
 
+# noinspection PyUnresolvedReferences
 def files_in_dir(path, start='.'):
     """
     return a list of filenames found by walking the directory tree starting at path

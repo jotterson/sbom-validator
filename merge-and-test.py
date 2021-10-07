@@ -39,6 +39,9 @@ MAGIC = '*BUILD-OUTPUT*'
 
 
 class FileStatus(object):
+    """
+    class defines file status constants
+    """
     HASH_MISMATCH = -2
     FILE_NOT_FOUND = -1
     UNDETERMINED = 0
