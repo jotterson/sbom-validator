@@ -1,2 +1,4 @@
 *.spdx
-/spdx/
+spdx/
+__pycache__/
+
