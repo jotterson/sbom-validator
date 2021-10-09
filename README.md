@@ -24,7 +24,7 @@ The intended use cases are as follows:
 
 ## What's Here
 
-* `crete-sbom.py` -- create sbom by scanning a directory
+* `create-sbom.py` -- create sbom by scanning a directory
   tree or a zip file.  This is used to create an initial
   'bootstrap' SBOM, or to create intermediate SBOMs
   during the build process.
@@ -32,6 +32,13 @@ The intended use cases are as follows:
   BUILD OUTPUT" option to be set on SBOM files.  
   Perhaps more features will be added later, this is 
   what I needed right now.
+* `merge-and-test.py` -- This is used to test and create a 'release'
+  SBOM to accompany a package release.  The third-party dependencies
+  are all validated by comparing the hashes.
+* `merge-by-sha256.py`-- Used to merge SBOM file metadata based on
+  the sha256 'checksums' on the files.  In this case, it is used to
+  find and mark the 'blessed' third-party components into an 'ideal'
+  SBOM
 * `validate-sbom.py` -- this validates an application's
   files on disk by comparing file presence and sha256 
   hash values.  Missing/extrafiles are detected and
@@ -46,4 +53,4 @@ checksums.  Consequently, this currently uses a patched
 library.  The patched library is currently at
 https://github.com/jotterson/tools-python
 
-J.B. Otterson 20211001
+J.B. Otterson 20211009
