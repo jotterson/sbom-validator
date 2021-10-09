@@ -41,9 +41,50 @@ from spdx.creationinfo import Tool
 from spdx.package import Package
 from spdx.file import File, FileType
 from spdx.checksum import Algorithm
-from spdx.utils import NoAssert  # , SPDXNone, UnKnown
+from spdx.utils import NoAssert, SPDXNone  # , UnKnown
 from spdx.parsers.tagvalue import Parser
 from spdx.parsers.tagvaluebuilders import Builder
+
+
+PARTIAL_LICENSES_LIST = [
+    'Apache-2.0',
+    'BSD-2-Clause',
+    'BSD-3-Clause',
+    'CDDL-1.0',
+    'CDDL-1.1',
+    'LGPL-2.1',
+    'LGPL-3',
+    'EPL-1.0',
+    'EPL-2.0',
+    'MIT',
+    'MPL-1.0',
+    'MPL-1.1',
+    'MPL-2.0',
+    'SPL-1.0',  # Sun Public License
+    ]
+
+ADDITIONAL_LICENSES_LIST = [
+    ('LicenseRef-LBC', 'Legion of the Bouncy Castle'),
+    ('LicenseRef-METASTUFF', 'MetaStuff, Ltd. and DOM4J contributors'),
+    ('LicenseRef-QOS.ch', 'QOS.ch (like MIT)'),
+    ('LicenseRef-Werken', 'The Werken Company (like BSD-3'),
+    ]
+
+
+ALL_LICENSES = []
+
+
+def get_licenses_list():
+    global ALL_LICENSES
+    if len(ALL_LICENSES) == 0:
+        ALL_LICENSES = [('None', str(SPDXNone())), ('No Assertion', str(NoAssert()))]
+        for license_name in PARTIAL_LICENSES_LIST:
+            spdx_license = License.from_identifier(license_name)
+            ALL_LICENSES.append((spdx_license.full_name, license_name))
+        for license_data in ADDITIONAL_LICENSES_LIST:
+            ALL_LICENSES.append((license_data[1], license_data[0]))
+    return ALL_LICENSES
+
 
 """
 map file extensions to SPDX file types.
@@ -230,7 +271,7 @@ def add_checksum_to_spdx_file(spdx_file, algorithm_name, hash_value):
     return spdx_file
 
 
-def read_tv_file(filename):
+def read_sbom_file(filename):
     """
     read the named SPDX tag/value file.
     :param filename: the file to read
@@ -248,7 +289,7 @@ def read_tv_file(filename):
     return document
 
 
-def write_tv_file(doc, filename):
+def write_sbom_file(doc, filename):
     """
     write a SPDX tag/value file.  Lifted nearly verbatim from spdx tools-python example code.
     :param doc: the SPDX document to save
@@ -370,6 +411,10 @@ def serialize_spdx_file_info(spdx_file):
             result += '|{}:{}'.format(k, str(v))
         elif isinstance(v, NoAssert):
             result += '|{}:NOASSERTION'.format(k)
+        elif isinstance(v, SPDXNone):
+            result += '|{}:{}'.format(k, str(SPDXNone))
+        elif isinstance(v, License):
+            result += serialize_spdx_license(v)
         elif isinstance(v, list):
             result += '|{}:['.format(k)
             if k == 'chk_sums':
@@ -393,8 +438,12 @@ def serialize_spdx_file_info(spdx_file):
                         first = False
             result += ']'
         else:
-            print('serialize_spdx_file_info unhandled type', k, v, type(v))
+            logging.warning('serialize_spdx_file_info unhandled type', k, v, type(v))
     return result
+
+
+def serialize_spdx_license(spdx_license):
+    return '|license_full_name:{}|license_identifier:{}'.format(spdx_license.full_name, spdx_license.identifier)
 
 
 def serialize_spdx_doc_creation_info(creation_info):

@@ -36,7 +36,7 @@ from zipfile import ZipFile
 
 import signature_utilities
 import spdx_utilities
-from spdx_utilities import read_tv_file
+from spdx_utilities import read_sbom_file
 from validation_utilities import calculate_hash_for_file, files_in_dir
 
 
@@ -240,7 +240,7 @@ def main():
     # read the spdx file that will be used for validation
     logging.info('Reading SBOM file {}'.format(args.sbom_file))
 
-    new_doc = read_tv_file(args.sbom_file)
+    new_doc = read_sbom_file(args.sbom_file)
     if new_doc is not None:
         logging.info('SBOM file contains {} file entries'.format(len(new_doc.packages[0].files)))
     else:

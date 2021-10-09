@@ -35,7 +35,7 @@ import signature_utilities
 import spdx_utilities
 
 CHECKSUM_ALGORITHM = 'SHA256'  # MUST be uppercase.
-MAGIC = '*BUILD-OUTPUT*'
+THIRD_PARTY_MAGIC = '*THIRD_PARTY*'
 
 
 class FileStatus(object):
@@ -67,12 +67,12 @@ def main():
     if args.ideal_sbom is None:
         logging.error('--ideal-sbom file must be specified')
         exit(1)
-    ideal_sbom = spdx_utilities.read_tv_file(args.ideal_sbom)
+    ideal_sbom = spdx_utilities.read_sbom_file(args.ideal_sbom)
 
     if args.build_sbom is None:
         logging.error('--build-sbom file must be specified')
         exit(1)
-    build_sbom = spdx_utilities.read_tv_file(args.build_sbom)
+    build_sbom = spdx_utilities.read_sbom_file(args.build_sbom)
 
     if args.result_sbom is None:
         logging.error('--result-sbom file must be specified')
@@ -132,7 +132,7 @@ def main():
             warnings += 1
         else:
             ideal_file = ideal_file_dict['file']
-            if ideal_file.comment is not None and ideal_file.comment.startswith(MAGIC):
+            if ideal_file.comment is not None and ideal_file.comment.startswith(THIRD_PARTY_MAGIC):
                 build_file_dict['status'] = FileStatus.BUILD_OUTPUT
                 ideal_file_dict['status'] = FileStatus.BUILD_OUTPUT
                 build_file.comment = ideal_file.comment
@@ -170,7 +170,7 @@ def main():
                                                          spdx_utilities.serialize_spdx_doc(build_sbom))
         spdx_utilities.add_signature_to_spdx_document(build_sbom, signature)
     # write the result sbom spdx file.
-    spdx_utilities.write_tv_file(build_sbom, args.result_sbom)
+    spdx_utilities.write_sbom_file(build_sbom, args.result_sbom)
     logging.info('done.')
 
 

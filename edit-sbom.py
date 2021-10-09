@@ -30,18 +30,19 @@ import argparse
 import logging
 import os
 
-from asciimatics.widgets import Button, Divider, Frame, Layout, MultiColumnListBox, Text, Widget
+from asciimatics.widgets import Button, Divider, DropdownList, Frame, Layout, MultiColumnListBox, Text, Widget
 from asciimatics.scene import Scene
 from asciimatics.screen import Screen
 from asciimatics.exceptions import NextScene, ResizeScreenError, StopApplication
 
 import signature_utilities
 import spdx_utilities
-from spdx_utilities import add_signature_to_spdx_document, read_tv_file, serialize_spdx_doc, write_tv_file
+from spdx_utilities import add_signature_to_spdx_document, read_sbom_file, serialize_spdx_doc, write_sbom_file
+from spdx.document import License
 from spdx.utils import NoAssert, SPDXNone  # , UnKnown
 
-#        01234567890123
-MAGIC = '*BUILD-OUTPUT*'
+#                    0123456789012
+THIRD_PARTY_MAGIC = '*THIRD-PARTY*'
 
 
 class SpdxFileFilesAsListModel(object):
@@ -52,7 +53,7 @@ class SpdxFileFilesAsListModel(object):
         self.filename = filename
         self.public_key = public_key
         self.private_key = private_key
-        self.spdx_doc = read_tv_file(filename)
+        self.spdx_doc = read_sbom_file(filename)
         if self.public_key is not None:
             # validate signature
             data = spdx_utilities.serialize_spdx_doc(self.spdx_doc)
@@ -104,10 +105,20 @@ class SpdxFileFilesAsListModel(object):
             elif isinstance(copyright_text, NoAssert):
                 copyright_text = 'NOASSERTION'
 
+            if isinstance(self.current_file.conc_lics, NoAssert):
+                license_text = 'NOASSERTION'
+            elif isinstance(self.current_file.conc_lics, SPDXNone):
+                license_text = 'NONE'
+            elif isinstance(self.current_file.conc_lics, License):
+                license_text = self.current_file.conc_lics.identifier
+            else:
+                license_text = 'NOASSERTION'
+
             data = {'name': self.current_file.name,
                     'comment': self.current_file.comment,
                     'spdx_id': self.current_file.spdx_id,
                     'copyright': copyright_text,
+                    'license': license_text,
                     'notice': self.current_file.notice,
                     }
             for hash_name in ['SHA1', 'SHA256', 'SHA512']:
@@ -135,13 +146,29 @@ class SpdxFileFilesAsListModel(object):
         :return: None
         """
         if self.current_file is not None:
-            self.current_file.comment = data.get('comment')
+            comment = data.get('comment') or ''
+            if len(comment) == 0:
+                comment = None
+            self.current_file.comment = comment
             copyright_text = data.get('copyright') or ''
             if copyright_text.upper() == 'NOASSERTION' or len(copyright_text) == 0:
                 self.current_file.copyright = NoAssert()
             else:
                 self.current_file.copyright = copyright_text
-            self.current_file.notice = data.get('notice')
+            notice = data.get('notice') or ''
+            if len(notice) == 0:
+                notice = None
+            self.current_file.notice = notice
+            license_text = data.get('license') or ''
+            if license_text == str(NoAssert()):
+                spdx_license = NoAssert()
+            elif license_text == str(SPDXNone):
+                spdx_license = SPDXNone()
+            elif len(license_text) > 0:
+                spdx_license = License.from_identifier(license_text)
+            else:
+                spdx_license = SPDXNone()
+            self.current_file.conc_lics = spdx_license
 
     def save_spdx_file(self):
         """
@@ -154,7 +181,7 @@ class SpdxFileFilesAsListModel(object):
                                                              serialize_spdx_doc(self.spdx_doc))
             add_signature_to_spdx_document(self.spdx_doc, signature)
         # write the spdx file.
-        write_tv_file(self.spdx_doc, self.filename)
+        write_sbom_file(self.spdx_doc, self.filename)
 
 
 class ListView(Frame):
@@ -205,14 +232,16 @@ class ListView(Frame):
         spdx_file = None
         if self._list_view.value is not None:
             spdx_file = self._model.get_spdxfile(self._list_view.value)
+            if spdx_file is not None:
+                self._model.current_file = spdx_file
 
         self._edit_button.disabled = spdx_file is None
         self._toggle_file_button.disabled = spdx_file is None
         self._toggle_dir_button.disabled = spdx_file is None
 
-    def _reload_list(self, new_value=None):
+    def _reload_list(self):
         self._list_view.options = self._model.get_listbox_options()
-        self._list_view.value = new_value
+        self._list_view.value = self._model.current_file.spdx_id
 
     def _edit(self):
         self.save()
@@ -221,32 +250,31 @@ class ListView(Frame):
     def _toggle_file(self):
         if self._model.current_file is not None:
             if self._model.current_file.comment is None:
-                self._model.current_file.comment = MAGIC
-            elif self._model.current_file.comment.startswith(MAGIC):
-                self._model.current_file.comment = self._model.current_file.comment[len(MAGIC):]
+                self._model.current_file.comment = THIRD_PARTY_MAGIC
+            elif self._model.current_file.comment.startswith(THIRD_PARTY_MAGIC):
+                self._model.current_file.comment = self._model.current_file.comment[len(THIRD_PARTY_MAGIC):]
                 if len(self._model.current_file.comment) == 0:
                     self._model.current_file.comment = None
             else:
-                self._model.current_file.comment = MAGIC + self._model.current_file.comment
+                self._model.current_file.comment = THIRD_PARTY_MAGIC + self._model.current_file.comment
         self.save()
-        self._reload_list(self._model.current_file.spdx_id)
+        self._reload_list()
 
     def _toggle_dir(self):
         if self._model.current_file is not None:
             filename = self._model.current_file.name
-            dir, name = os.path.split(filename)
+            dir_name, name = os.path.split(filename)
             for file in self._model.files:
                 file_dir, file_name = os.path.split(file.name)
-                if file_dir == dir:  # same directory!
+                if file_dir == dir_name:  # same directory!
                     if file.comment is None or len(file.comment) == 0:
-                        file.comment = MAGIC
-                    elif file.comment.startswith(MAGIC):
-                        file.comment = file.comment[len(MAGIC):]
+                        file.comment = THIRD_PARTY_MAGIC
+                    elif file.comment.startswith(THIRD_PARTY_MAGIC):
+                        file.comment = file.comment[len(THIRD_PARTY_MAGIC):]
                     else:
-                        file.comment = MAGIC + file.comment
+                        file.comment = THIRD_PARTY_MAGIC + file.comment
         self.save()
-        self._reload_list(self._model.current_file.spdx_id)
-
+        self._reload_list()
 
     def _save_button_action(self):
         self._model.save_spdx_file()
@@ -263,7 +291,7 @@ class SpdxFileView(Frame):
     """
     def __init__(self, screen, model):
         super(SpdxFileView, self).__init__(screen,
-                                           11,
+                                           12,
                                            100,
                                            hover_focus=True,
                                            can_scroll=False,
@@ -280,6 +308,9 @@ class SpdxFileView(Frame):
         layout.add_widget(Text('SHA512:', 'sha512', readonly=True))
         layout.add_widget(Text('Comment:', 'comment'))
         layout.add_widget(Text('Copyright:', 'copyright'))
+        self._dropdown = DropdownList(options=spdx_utilities.get_licenses_list(), label='License:', name='license')
+        layout.add_widget(self._dropdown)
+        self._dropdown.value = self.data.get('copyright')
         layout.add_widget(Text('Notice:', 'notice'))
         layout2 = Layout([1, 1, 1, 1])
         self.add_layout(layout2)
