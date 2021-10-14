@@ -121,11 +121,11 @@ def main():
 
     merge_files_by_sha256 = {}
     for file in merge_files:
-        sha256 = file.get_chksum(CHECKSUM_ALGORITHM)
+        sha256 = file.get_chk_sum(CHECKSUM_ALGORITHM)
         merge_files_by_sha256[sha256.value] = file
         
     for source_file in source_files:
-        sha256 = source_file.get_chksum(CHECKSUM_ALGORITHM)
+        sha256 = source_file.get_chk_sum(CHECKSUM_ALGORITHM)
         if sha256 is not None:
             merge_file = merge_files_by_sha256.get(sha256.value)
             if merge_file is not None:

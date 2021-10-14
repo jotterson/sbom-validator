@@ -138,8 +138,8 @@ def main():
                 build_file.comment = ideal_file.comment
                 successes += 1
             else:
-                ideal_file_sha256 = ideal_file.get_chksum(CHECKSUM_ALGORITHM).value
-                build_file_sha256 = build_file.get_chksum(CHECKSUM_ALGORITHM).value
+                ideal_file_sha256 = ideal_file.get_chk_sum(CHECKSUM_ALGORITHM).value
+                build_file_sha256 = build_file.get_chk_sum(CHECKSUM_ALGORITHM).value
                 if ideal_file_sha256 == build_file_sha256:
                     build_file_dict['status'] = FileStatus.HASH_MATCH
                     ideal_file_dict['status'] = FileStatus.HASH_MATCH
