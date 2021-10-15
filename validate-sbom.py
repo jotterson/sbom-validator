@@ -33,6 +33,7 @@ import hashlib
 import logging
 import os
 from zipfile import ZipFile
+from spdx.file import FileType
 
 import signature_utilities
 import spdx_utilities
@@ -83,26 +84,33 @@ def validate_package_path(package_path, sbom_files):
 
     # now compare checksums for all files that are both on disk and in the SBOM.
     mismatched_files = 0
+    unchecked_files = 0
     hash_algorithm = 'sha256'
     for file, file_dict in files_on_disk.items():
         if file_dict.get('found_in_sbom'):
             sbom_file = file_dict.get('sbom_file')
-            checksums = sbom_file.chk_sums
-            # get checksum hash value from the SBOM
-            sbom_file_hash_value = None
-            for chk_sum in checksums:
-                if chk_sum.identifier.lower() == hash_algorithm:
-                    sbom_file_hash_value = chk_sum.value
-            if sbom_file_hash_value is None:
-                logging.error('Cannot get {} hash value for file {}.'.format(hash_algorithm, file))
-                exit(1)
-            disk_file_hash_value = calculate_hash_for_file('{}/{}'.format(package_path, file), hash_algorithm)
-            # now compare the hashes
-            if sbom_file_hash_value != disk_file_hash_value:
-                # danger will robinson!
-                logging.warning('Checksum mismatch! File {} {} checksum does not match the SBOM'.format(file,
-                                                                                                        hash_algorithm))
-                mismatched_files += 1
+            if FileType.APPLICATION in sbom_file.file_types:
+                checksums = sbom_file.chk_sums
+                # get checksum hash value from the SBOM
+                sbom_file_hash_value = None
+                for chk_sum in checksums:
+                    if chk_sum.identifier.lower() == hash_algorithm:
+                        sbom_file_hash_value = chk_sum.value
+                if sbom_file_hash_value is None:
+                    logging.error('Cannot get {} hash value for file {}.'.format(hash_algorithm, file))
+                    exit(1)
+                disk_file_hash_value = calculate_hash_for_file('{}/{}'.format(package_path, file), hash_algorithm)
+                # now compare the hashes
+                if sbom_file_hash_value != disk_file_hash_value:
+                    # danger will robinson!
+                    logging.warning('Checksum mismatch!' +
+                                    ' File {} {} checksum does not match the SBOM'.format(file, hash_algorithm))
+                    mismatched_files += 1
+            else:
+                unchecked_files += 1
+
+    if unchecked_files != 0:
+        logging.info('{} file(s) were excluded from checksum matching.'.format(unchecked_files))
 
     if missing_files != 0 or extra_files != 0 or mismatched_files != 0:
         logging.warning('Package fails integrity testing.')
@@ -133,7 +141,8 @@ def validate_package_zip(package_zip, sbom_files):
 
         files_on_disk = {}
         for file in files:
-            sbom_file_dict = sbom_file_name_map.get(file)
+            sbom_file_name = './' + file
+            sbom_file_dict = sbom_file_name_map.get(sbom_file_name)
             if sbom_file_dict is not None:
                 sbom_file_dict['found_on_disk'] = True
                 files_on_disk[file] = {'sbom_file': sbom_file_dict.get('sbom_file'),
@@ -157,29 +166,36 @@ def validate_package_zip(package_zip, sbom_files):
 
         # now compare checksums for all files that are both on disk and in the SBOM.
         mismatched_files = 0
+        unchecked_files = 0
         hash_algorithm = 'sha256'
         for file, file_dict in files_on_disk.items():
             if file_dict.get('found_in_sbom'):
                 sbom_file = file_dict.get('sbom_file')
-                checksums = sbom_file.chk_sums
-                # get checksum hash value from the SBOM
-                sbom_file_hash_value = None
-                for chk_sum in checksums:
-                    if chk_sum.identifier.lower() == hash_algorithm:
-                        sbom_file_hash_value = chk_sum.value
-                if sbom_file_hash_value is None:
-                    logging.error('Cannot get {} hash value for file {}.'.format(hash_algorithm, file))
-                    exit(1)
-                hasher = hashlib.new(hash_algorithm)
-                data = zipfile.read(file)
-                hasher.update(data)
-                disk_file_hash_value = hasher.hexdigest()
-                # now compare the hashes
-                if sbom_file_hash_value != disk_file_hash_value:
-                    # danger will robinson!
-                    logging.warning('Checksum mismatch! ' +
-                                    'File {} {} checksum does not match the SBOM'.format(file, hash_algorithm))
-                    mismatched_files += 1
+                if FileType.APPLICATION in sbom_file.file_types:
+                    checksums = sbom_file.chk_sums
+                    # get checksum hash value from the SBOM
+                    sbom_file_hash_value = None
+                    for chk_sum in checksums:
+                        if chk_sum.identifier.lower() == hash_algorithm:
+                            sbom_file_hash_value = chk_sum.value
+                    if sbom_file_hash_value is None:
+                        logging.error('Cannot get {} hash value for file {}.'.format(hash_algorithm, file))
+                        exit(1)
+                    hasher = hashlib.new(hash_algorithm)
+                    data = zipfile.read(file)
+                    hasher.update(data)
+                    disk_file_hash_value = hasher.hexdigest()
+                    # now compare the hashes
+                    if sbom_file_hash_value != disk_file_hash_value:
+                        # danger will robinson!
+                        logging.warning('Checksum mismatch! ' +
+                                        'File {} {} checksum does not match the SBOM'.format(file, hash_algorithm))
+                        mismatched_files += 1
+            else:
+                unchecked_files += 1
+
+        if unchecked_files != 0:
+            logging.info('{} file(s) were excluded from checksum matching.'.format(unchecked_files))
 
         if missing_files != 0 or extra_files != 0 or mismatched_files != 0:
             logging.warning('Package fails integrity testing.')

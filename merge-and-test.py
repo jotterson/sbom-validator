@@ -33,9 +33,10 @@ import logging
 
 import signature_utilities
 import spdx_utilities
+from spdx.document import License
 
 CHECKSUM_ALGORITHM = 'SHA256'  # MUST be uppercase.
-THIRD_PARTY_MAGIC = '*THIRD_PARTY*'
+THIRD_PARTY_MAGIC = '*THIRD-PARTY*'
 
 
 class FileStatus(object):
@@ -107,6 +108,7 @@ def main():
     successes = 0
     warnings = 0
     errors = 0
+    third_party_dependencies_merged = 0
     ideal_files = []
     for package in ideal_sbom.packages:
         ideal_files.extend(package.files)
@@ -133,22 +135,38 @@ def main():
         else:
             ideal_file = ideal_file_dict['file']
             if ideal_file.comment is not None and ideal_file.comment.startswith(THIRD_PARTY_MAGIC):
-                build_file_dict['status'] = FileStatus.BUILD_OUTPUT
-                ideal_file_dict['status'] = FileStatus.BUILD_OUTPUT
-                build_file.comment = ideal_file.comment
-                successes += 1
-            else:
                 ideal_file_sha256 = ideal_file.get_chk_sum(CHECKSUM_ALGORITHM).value
                 build_file_sha256 = build_file.get_chk_sum(CHECKSUM_ALGORITHM).value
                 if ideal_file_sha256 == build_file_sha256:
+                    logging.info('Merging data for third-party component {}'.format(build_file_name))
+                    if not isinstance(ideal_file.conc_lics, License):
+                        logging.warning('{} has no license data'.format(build_file_name))
                     build_file_dict['status'] = FileStatus.HASH_MATCH
                     ideal_file_dict['status'] = FileStatus.HASH_MATCH
+                    # merge data from ideal file
+                    build_file.comment = ideal_file.comment
+                    build_file.file_types = ideal_file.file_types
+                    build_file.conc_lics = ideal_file.conc_lics
+                    build_file.licenses_in_file = ideal_file.licenses_in_file
+                    build_file.license_comment = ideal_file.license_comment
+                    build_file.copyright = ideal_file.copyright
+                    build_file.notice = ideal_file.notice
+                    build_file.attribution_text = ideal_file.attribution_text
+                    build_file.contributors = ideal_file.contributors
+                    build_file.dependencies = ideal_file.dependencies
+                    build_file.artifact_of_project_name = ideal_file.artifact_of_project_name
+                    build_file.artifact_of_project_home = ideal_file.artifact_of_project_home
+                    build_file.artifact_of_project_uri = ideal_file.artifact_of_project_uri
                     successes += 1
+                    third_party_dependencies_merged += 1
                 else:
                     build_file_dict['status'] = FileStatus.HASH_MISMATCH
                     ideal_file_dict['status'] = FileStatus.HASH_MISMATCH
                     logging.warning('Hash mismatch on file {}'.format(build_file_name))
                     errors += 1
+            else:
+                build_file_dict['status'] = FileStatus.BUILD_OUTPUT
+                ideal_file_dict['status'] = FileStatus.BUILD_OUTPUT
 
     for ideal_file_dict in ideal_files_by_name.values():
         ideal_file = ideal_file_dict['file']
@@ -161,6 +179,8 @@ def main():
         logging.info('{} errors'.format(errors))
     if warnings > 0:
         logging.info('{} warnings'.format(warnings))
+    if third_party_dependencies_merged > 0:
+        logging.info('{} third-party dependencies had data merged.'.format(third_party_dependencies_merged))
     if errors == 0 and warnings == 0:
         logging.info('No errors or warnings.')
     logging.info('Writing result SBOM {}'.format(args.result_sbom))

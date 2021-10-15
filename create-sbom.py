@@ -108,6 +108,7 @@ def package_zip_to_spdx_doc(args):
                 _, filename = os.path.split(file)
             else:
                 filename = file
+            filename = './' + filename
             spdx_file = new_spdx_file(filename=filename, spdx_id=new_spdx_id())
             if args.file_comment is not None:
                 spdx_file.comment = args.comment

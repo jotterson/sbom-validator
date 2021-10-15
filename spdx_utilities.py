@@ -65,11 +65,13 @@ PARTIAL_LICENSES_LIST = [
 
 ADDITIONAL_LICENSES_LIST = [
     ('LicenseRef-LBC', 'Legion of the Bouncy Castle'),
+    ('LicenseRef-EDL-1.0', 'EDL 1.0'),
     ('LicenseRef-METASTUFF', 'MetaStuff, Ltd. and DOM4J contributors'),
+    ('LicenseRef-OracleJava', 'Oracle Binary Code License Agreement for Java SE and JavaFX Technologies'),
+    ('LicenseRef-OtherCommercial', 'Other Commercial License'),
     ('LicenseRef-QOS.ch', 'QOS.ch (like MIT)'),
     ('LicenseRef-Werken', 'The Werken Company (like BSD-3'),
     ]
-
 
 ALL_LICENSES = []
 
@@ -77,12 +79,16 @@ ALL_LICENSES = []
 def get_licenses_list():
     global ALL_LICENSES
     if len(ALL_LICENSES) == 0:
-        ALL_LICENSES = [('None', str(SPDXNone())), ('No Assertion', str(NoAssert()))]
+        licenses = []
         for license_name in PARTIAL_LICENSES_LIST:
             spdx_license = License.from_identifier(license_name)
-            ALL_LICENSES.append((spdx_license.full_name, license_name))
+            licenses.append((spdx_license.full_name, license_name))
         for license_data in ADDITIONAL_LICENSES_LIST:
-            ALL_LICENSES.append((license_data[1], license_data[0]))
+            licenses.append((license_data[1], license_data[0]))
+        licenses = sorted(licenses, key=lambda l: l[0])
+        full_list = [('None', str(SPDXNone())), ('No Assertion', str(NoAssert()))]
+        full_list.extend(licenses)
+        ALL_LICENSES = full_list
     return ALL_LICENSES
 
 
@@ -91,6 +97,7 @@ map file extensions to SPDX file types.
 """
 file_extension_to_spdx_file_type_mapping = {
     '.bat': [FileType.TEXT, FileType.APPLICATION, FileType.OTHER],
+    '.bsh': [FileType.TEXT, FileType.APPLICATION, FileType.OTHER],
     '.class': [FileType.APPLICATION, FileType.BINARY],
     '.conf': [FileType.TEXT, FileType.OTHER],
     '.css': [FileType.TEXT, FileType.APPLICATION, FileType.SOURCE],
@@ -98,21 +105,27 @@ file_extension_to_spdx_file_type_mapping = {
     '.dtd': [FileType.TEXT, FileType.APPLICATION, FileType.SOURCE],
     '.eot': [FileType.IMAGE, FileType.OTHER],
     '.exe': [FileType.APPLICATION, FileType.BINARY],
+    '.gemspec': [FileType.TEXT, FileType.APPLICATION, FileType.OTHER],
     '.gif': [FileType.IMAGE, FileType.OTHER],
-    '.htm': [FileType.TEXT, FileType.DOCUMENTATION, FileType.OTHER],
-    '.html': [FileType.TEXT, FileType.DOCUMENTATION, FileType.OTHER],
+    '.gz': [FileType.APPLICATION, FileType.ARCHIVE],
+    '.htm': [FileType.TEXT, FileType.APPLICATION, FileType.OTHER],
+    '.html': [FileType.TEXT, FileType.APPLICATION, FileType.OTHER],
     '.ico': [FileType.IMAGE, FileType.OTHER],
     '.jar': [FileType.APPLICATION, FileType.ARCHIVE],
     '.jpg': [FileType.IMAGE, FileType.OTHER],
     '.js': [FileType.TEXT, FileType.APPLICATION, FileType.SOURCE],
     '.jsp': [FileType.TEXT, FileType.APPLICATION, FileType.SOURCE],
     '.map': [FileType.OTHER],
+    '.md': [FileType.TEXT, FileType.DOCUMENTATION, FileType.OTHER],
     '.pdf': [FileType.IMAGE, FileType.OTHER],
     '.png': [FileType.IMAGE, FileType.OTHER],
     '.properties': [FileType.TEXT, FileType.OTHER],
+    '.rb': [FileType.TEXT, FileType.APPLICATION, FileType.OTHER],
     '.sh': [FileType.TEXT, FileType.APPLICATION, FileType.OTHER],
+    '.so': [FileType.TEXT, FileType.APPLICATION, FileType.BINARY],
     '.sql': [FileType.TEXT, FileType.APPLICATION, FileType.OTHER],
     '.svg': [FileType.IMAGE, FileType.OTHER],
+    '.tar': [FileType.APPLICATION, FileType.ARCHIVE],
     '.ttf': [FileType.IMAGE, FileType.OTHER],
     '.txt': [FileType.TEXT, FileType.DOCUMENTATION, FileType.OTHER],
     '.xml': [FileType.TEXT, FileType.OTHER],
@@ -168,6 +181,8 @@ def guess_spdx_file_type_from_data(data):
     :return: a list of SPDX File Types
     """
     if len(data) > 0:
+        if data[0:4] == b'\x7fELF':  # looks like a ELF binary.
+            return [FileType.APPLICATION, FileType.OTHER, FileType.BINARY]
         if data[0:3] == b'#!/':  # looks like a script file
             return [FileType.APPLICATION, FileType.OTHER, FileType.TEXT]
         is_text = True

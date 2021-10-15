@@ -28,7 +28,6 @@ OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import argparse
 import logging
-import os
 
 from asciimatics.widgets import Button, Divider, DropdownList, Frame, Layout, MultiColumnListBox, Text, Widget
 from asciimatics.scene import Scene
@@ -101,7 +100,7 @@ class SpdxFileFilesAsListModel(object):
         else:
             copyright_text = self.current_file.copyright
             if copyright_text is None:
-                copyright_text = SPDXNone()
+                copyright_text = 'NONE'
             elif isinstance(copyright_text, NoAssert):
                 copyright_text = 'NOASSERTION'
 
@@ -150,25 +149,37 @@ class SpdxFileFilesAsListModel(object):
             if len(comment) == 0:
                 comment = None
             self.current_file.comment = comment
-            copyright_text = data.get('copyright') or ''
-            if copyright_text.upper() == 'NOASSERTION' or len(copyright_text) == 0:
+            copyright_text = data.get('copyright') or 'NOASSERTION'
+            if copyright_text.upper() == 'NOASSERTION':
                 self.current_file.copyright = NoAssert()
+            elif copyright_text.upper() == 'NONE' or len(copyright_text) == 0:
+                self.current_file.copyright = SPDXNone
             else:
                 self.current_file.copyright = copyright_text
             notice = data.get('notice') or ''
             if len(notice) == 0:
                 notice = None
             self.current_file.notice = notice
-            license_text = data.get('license') or ''
+            license_text = data.get('license') or 'NOASSERTION'
             if license_text == str(NoAssert()):
-                spdx_license = NoAssert()
-            elif license_text == str(SPDXNone):
-                spdx_license = SPDXNone()
-            elif len(license_text) > 0:
-                spdx_license = License.from_identifier(license_text)
+                self.current_file.conc_lics = NoAssert()
+            elif license_text == 'NONE' or len(license_text) == 0:
+                self.current_file.conc_lics = SPDXNone()
             else:
-                spdx_license = SPDXNone()
-            self.current_file.conc_lics = spdx_license
+                self.current_file.conc_lics = License.from_identifier(license_text)
+
+    def delete_file(self, file):
+        """
+        delete a file from a sbom
+        :param file: the spdx file to delete
+        :return: None
+        """
+        for package in self.spdx_doc.packages:
+            if file in package.files:
+                package.files.remove(file)
+                break
+        if file in self.files:
+            self.files.remove(file)
 
     def save_spdx_file(self):
         """
@@ -207,9 +218,9 @@ class ListView(Frame):
             name='files',
             add_scroll_bar=True,
             on_change=self._on_pick,
-            on_select=self._toggle_file)
+            on_select=self._edit)
         self._toggle_file_button = Button('Toggle File', self._toggle_file)
-        self._toggle_dir_button = Button('Toggle Dir', self._toggle_dir)
+        self._toggle_dir_button = Button('Delete', self._delete)
         self._edit_button = Button('Edit', self._edit)
 
         if self._model.current_file is not None:
@@ -260,19 +271,22 @@ class ListView(Frame):
         self.save()
         self._reload_list()
 
-    def _toggle_dir(self):
+    def _delete(self):
         if self._model.current_file is not None:
             filename = self._model.current_file.name
-            dir_name, name = os.path.split(filename)
+            current_file = None
+            prior_file = None
             for file in self._model.files:
-                file_dir, file_name = os.path.split(file.name)
-                if file_dir == dir_name:  # same directory!
-                    if file.comment is None or len(file.comment) == 0:
-                        file.comment = THIRD_PARTY_MAGIC
-                    elif file.comment.startswith(THIRD_PARTY_MAGIC):
-                        file.comment = file.comment[len(THIRD_PARTY_MAGIC):]
-                    else:
-                        file.comment = THIRD_PARTY_MAGIC + file.comment
+                if file.name == filename:
+                    current_file = file
+                    break
+                prior_file = file
+            if current_file is not None:
+                self._model.delete_file(current_file)
+                if prior_file is None:
+                    prior_file = self._model.files[0]
+                self._model.current_file = prior_file
+                self._list_view.value = self._model.current_file.spdx_id
         self.save()
         self._reload_list()
 

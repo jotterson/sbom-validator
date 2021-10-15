@@ -29,7 +29,8 @@ The intended use cases are as follows:
   'bootstrap' SBOM, or to create intermediate SBOMs
   during the build process.
 * `edit-sbom.py` -- a simple TUI edit tool allows the 
-  BUILD OUTPUT" option to be set on SBOM files.  
+  `*THIRD-PARTY*` comment to be set on SBOM files, and license
+  to bet set on the files, too.
   Perhaps more features will be added later, this is 
   what I needed right now.
 * `merge-and-test.py` -- This is used to test and create a 'release'
