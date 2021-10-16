@@ -36,7 +36,6 @@ import spdx_utilities
 from spdx.document import License
 
 CHECKSUM_ALGORITHM = 'SHA256'  # MUST be uppercase.
-THIRD_PARTY_MAGIC = '*THIRD-PARTY*'
 
 
 class FileStatus(object):
@@ -134,13 +133,11 @@ def main():
             warnings += 1
         else:
             ideal_file = ideal_file_dict['file']
-            if ideal_file.comment is not None and ideal_file.comment.startswith(THIRD_PARTY_MAGIC):
+            if isinstance(ideal_file.conc_lics, License):
                 ideal_file_sha256 = ideal_file.get_chk_sum(CHECKSUM_ALGORITHM).value
                 build_file_sha256 = build_file.get_chk_sum(CHECKSUM_ALGORITHM).value
                 if ideal_file_sha256 == build_file_sha256:
                     logging.info('Merging data for third-party component {}'.format(build_file_name))
-                    if not isinstance(ideal_file.conc_lics, License):
-                        logging.warning('{} has no license data'.format(build_file_name))
                     build_file_dict['status'] = FileStatus.HASH_MATCH
                     ideal_file_dict['status'] = FileStatus.HASH_MATCH
                     # merge data from ideal file

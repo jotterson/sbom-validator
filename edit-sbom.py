@@ -40,9 +40,6 @@ from spdx_utilities import add_signature_to_spdx_document, read_sbom_file, seria
 from spdx.document import License
 from spdx.utils import NoAssert, SPDXNone  # , UnKnown
 
-#                    0123456789012
-THIRD_PARTY_MAGIC = '*THIRD-PARTY*'
-
 
 class SpdxFileFilesAsListModel(object):
     """
@@ -219,9 +216,10 @@ class ListView(Frame):
             add_scroll_bar=True,
             on_change=self._on_pick,
             on_select=self._edit)
-        self._toggle_file_button = Button('Toggle File', self._toggle_file)
-        self._toggle_dir_button = Button('Delete', self._delete)
+        self._delete_button = Button('Delete', self._delete_file)
         self._edit_button = Button('Edit', self._edit)
+        self._add_button = Button('Add', self._add_file)
+        self._add_button.disabled = True
 
         if self._model.current_file is not None:
             self._list_view.value = self._model.current_file.spdx_id
@@ -231,8 +229,8 @@ class ListView(Frame):
         layout.add_widget(Divider())
         layout2 = Layout([1, 1, 1, 1, 1])
         self.add_layout(layout2)
-        layout2.add_widget(self._toggle_file_button, 0)
-        layout2.add_widget(self._toggle_dir_button, 1)
+        layout2.add_widget(self._add_button, 0)
+        layout2.add_widget(self._delete_button, 1)
         layout2.add_widget(self._edit_button, 2)
         layout2.add_widget(Button('Cancel', self._quit), 3)
         layout2.add_widget(Button('Save', self._save_button_action), 4)
@@ -247,8 +245,7 @@ class ListView(Frame):
                 self._model.current_file = spdx_file
 
         self._edit_button.disabled = spdx_file is None
-        self._toggle_file_button.disabled = spdx_file is None
-        self._toggle_dir_button.disabled = spdx_file is None
+        self._delete_button.disabled = spdx_file is None
 
     def _reload_list(self):
         self._list_view.options = self._model.get_listbox_options()
@@ -258,20 +255,13 @@ class ListView(Frame):
         self.save()
         raise NextScene('Edit File')
 
-    def _toggle_file(self):
+    def _add_file(self):
         if self._model.current_file is not None:
-            if self._model.current_file.comment is None:
-                self._model.current_file.comment = THIRD_PARTY_MAGIC
-            elif self._model.current_file.comment.startswith(THIRD_PARTY_MAGIC):
-                self._model.current_file.comment = self._model.current_file.comment[len(THIRD_PARTY_MAGIC):]
-                if len(self._model.current_file.comment) == 0:
-                    self._model.current_file.comment = None
-            else:
-                self._model.current_file.comment = THIRD_PARTY_MAGIC + self._model.current_file.comment
+            pass
         self.save()
         self._reload_list()
 
-    def _delete(self):
+    def _delete_file(self):
         if self._model.current_file is not None:
             filename = self._model.current_file.name
             current_file = None

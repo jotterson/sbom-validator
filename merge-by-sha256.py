@@ -135,7 +135,9 @@ def main():
                 if source_file_name != merge_file_name:
                     logging.warning('File names do not match but sha does: {} should be {}'.format(source_file_name,
                                                                                                    merge_file_name))
-                    source_file.comment += ' {}'.format(merge_file_name)
+                    if source_file.comment is None:
+                        source_file.comment = ''
+                    source_file.comment += 'name is {}'.format(merge_file_name)
                     warnings += 1
                 else:
                     successes += 1

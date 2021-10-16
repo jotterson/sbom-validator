@@ -28,11 +28,9 @@ The intended use cases are as follows:
   tree or a zip file.  This is used to create an initial
   'bootstrap' SBOM, or to create intermediate SBOMs
   during the build process.
-* `edit-sbom.py` -- a simple TUI edit tool allows the 
-  `*THIRD-PARTY*` comment to be set on SBOM files, and license
-  to bet set on the files, too.
-  Perhaps more features will be added later, this is 
-  what I needed right now.
+* `edit-sbom.py` -- a simple TUI edit tool allows the CRUD operations
+  on SBOM files.  The add/edit functionality will allow copyright
+  and other metadata to be easily manipulated.
 * `merge-and-test.py` -- This is used to test and create a 'release'
   SBOM to accompany a package release.  The third-party dependencies
   are all validated by comparing the hashes.
@@ -54,4 +52,4 @@ checksums.  Consequently, this currently uses a patched
 library.  The patched library is currently at
 https://github.com/jotterson/tools-python
 
-J.B. Otterson 20211009
+J.B. Otterson 20211016
