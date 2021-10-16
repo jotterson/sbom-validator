@@ -80,7 +80,7 @@ def package_path_to_spdx_doc(args):
         spdx_file = new_spdx_file(filename=file, spdx_id=new_spdx_id())
         if args.file_comment is not None:
             spdx_file.comment = args.file_comment
-        hash_names = ['sha1', 'sha256', 'sha512']
+        hash_names = ['sha1', 'sha256']
         for hash_name in hash_names:
             hash_value = calculate_hash_for_file(full_path, hash_name)
             add_checksum_to_spdx_file(spdx_file, hash_name.upper(), hash_value)
@@ -113,7 +113,7 @@ def package_zip_to_spdx_doc(args):
             if args.file_comment is not None:
                 spdx_file.comment = args.comment
             data = zipfile.read(file)
-            hash_names = ['sha1', 'sha256', 'sha512']
+            hash_names = ['sha1', 'sha256']
             for hash_name in hash_names:
                 hasher = hashlib.new(hash_name)
                 hasher.update(data)

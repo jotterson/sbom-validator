@@ -117,7 +117,7 @@ class SpdxFileFilesAsListModel(object):
                     'license': license_text,
                     'notice': self.current_file.notice,
                     }
-            for hash_name in ['SHA1', 'SHA256', 'SHA512']:
+            for hash_name in ['SHA1', 'SHA256']:
                 hash_value = self.current_file.get_chk_sum(hash_name)
                 if hash_value is not None:
                     value = hash_value.value
@@ -309,7 +309,6 @@ class SpdxFileView(Frame):
         layout.add_widget(Text('SPDXID:', 'spdx_id', readonly=True))
         layout.add_widget(Text('SHA1:', 'sha1', readonly=True))
         layout.add_widget(Text('SHA256:', 'sha256', readonly=True))
-        layout.add_widget(Text('SHA512:', 'sha512', readonly=True))
         layout.add_widget(Text('Comment:', 'comment'))
         layout.add_widget(Text('Copyright:', 'copyright'))
         self._dropdown = DropdownList(options=spdx_utilities.get_licenses_list(), label='License:', name='license')
