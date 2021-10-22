@@ -8,16 +8,21 @@ This project uses cryptographic hashes in a Software Bill Of Materials values to
 
 The intended use cases are as follows:
 
-1. a SBOM is initially created using the `create-sbom.py`
-   script.
-2. the initial SBOM is 'edited' to mark components that
-   are produced by the build.
-3. merge and test.  not built yet.  This happens at the end
-   of the build process, to compare the build output to the 
+1. A 'bootstrap' SBOM is initially created using the 
+   `create-sbom.py` from the build output.
+1. `create-sbom.py` is also used to create a list of 'approved'
+   third-party components.
+1. The `edit-sbom.py` script is used to set license information on
+   the third-party components.
+1. `merge-by-sha256` is used to merge the third-party component data
+   into the 'bootstrap' SBOM to create the 'ideal' SBOM
+3. `merge-and-test.py` is used at the end
+   of the build process to compare the build output to the 
    ideal SBOM.  If files that were not identified as build
    outputs in the edit phase have a different hash then a
-   warning is raised.  build outputs get their hashes
-   calculated, and the build output SBOM is produced.
+   warning is raised.  Build outputs get their hashes
+   calculated, and the build output SBOM is produced. This step
+   will detect mis-matched third-party components.
 4. the `validate-sbom.py` script is used to validate the
    integrity of the application release's file once
    installed on a runtime environment.
@@ -46,10 +51,10 @@ The intended use cases are as follows:
 ## Caveats
 
 The tools-python 'spdx' library on which this depends does
-not comply with the SPDX-2.1 standard, there is no support
+not fully comply with the SPDX-2.1 standard, there is no support
 for multiple file types, and no support for multiple file
 checksums.  Consequently, this currently uses a patched
 library.  The patched library is currently at
 https://github.com/jotterson/tools-python
 
-J.B. Otterson 20211016
+J.B. Otterson 20211022

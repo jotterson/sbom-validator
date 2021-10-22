@@ -208,7 +208,8 @@ def validate_package_zip(package_zip, sbom_files):
 # noinspection DuplicatedCode
 def main():
     parser = argparse.ArgumentParser(description='Bootstrap SBOM file')
-    parser.add_argument('--debug', action='store_true', help='output API debug data')
+    parser.add_argument('--debug', action='store_true', help='show logging informational output')
+    parser.add_argument('--info', action='store_true', help='show informational diagnostic output')
     parser.add_argument('--sbom-file', type=str, help='SBOM tag/value filename to write')
     parser.add_argument('--package-path', type=str, help='path to base of package')
     parser.add_argument('--package-zip', type=str, help='path to package zipfile')
@@ -216,9 +217,11 @@ def main():
     args = parser.parse_args()
 
     if args.debug:
-        logging.basicConfig(format='%(message)s', level=logging.DEBUG)
-    else:
+        logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.DEBUG)
+    elif args.info:
         logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
+    else:
+        logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.WARNING)
 
     if args.package_path is None and args.package_zip is None:
         logging.error('--package-path or --package-zip must be supplied')

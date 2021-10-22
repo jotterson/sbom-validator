@@ -346,16 +346,19 @@ def run_tui(screen, scene):
 # noinspection DuplicatedCode
 def main():
     parser = argparse.ArgumentParser(description='Bootstrap SBOM file')
-    parser.add_argument('--debug', action='store_true', help='output API debug data')
+    parser.add_argument('--debug', action='store_true', help='show logging informational output')
+    parser.add_argument('--info', action='store_true', help='show informational diagnostic output')
     parser.add_argument('--sbom-file', type=str, help='SBOM tag/value filename to write')
     parser.add_argument('--public-key', type=str, help='path to rsa public key used for digital signature validation')
     parser.add_argument('--private-key', type=str, help='private key for signing SBOM')
     args = parser.parse_args()
 
     if args.debug:
-        logging.basicConfig(format='%(message)s', level=logging.DEBUG)
-    else:
+        logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.DEBUG)
+    elif args.info:
         logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
+    else:
+        logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.WARNING)
 
     if args.sbom_file is None:
         logging.error('--sbom-file must be present')

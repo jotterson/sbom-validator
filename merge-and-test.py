@@ -34,6 +34,7 @@ import logging
 import signature_utilities
 import spdx_utilities
 from spdx.document import License
+from spdx.file import FileType
 
 CHECKSUM_ALGORITHM = 'SHA256'  # MUST be uppercase.
 
@@ -51,7 +52,8 @@ class FileStatus(object):
 
 def main():
     parser = argparse.ArgumentParser(description='Bootstrap SBOM file')
-    parser.add_argument('--debug', action='store_true', help='output API debug data')
+    parser.add_argument('--debug', action='store_true', help='show logging informational output')
+    parser.add_argument('--info', action='store_true', help='show informational diagnostic output')
     parser.add_argument('--ideal-sbom', type=str, help='ideal SBOM filename to read')
     parser.add_argument('--build-sbom', type=str, help='build output SBOM filename to read')
     parser.add_argument('--result-sbom', type=str, help='build output SBOM filename to write')
@@ -61,8 +63,10 @@ def main():
 
     if args.debug:
         logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.DEBUG)
-    else:
+    elif args.info:
         logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
+    else:
+        logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.WARNING)
 
     if args.ideal_sbom is None:
         logging.error('--ideal-sbom file must be specified')
@@ -94,14 +98,16 @@ def main():
         if signature is not None:
             data = spdx_utilities.serialize_spdx_doc(ideal_sbom)
             if not signature_utilities.validate_signature(public_key, signature, data):
-                raise RuntimeError('Digital signature mismatch on ideal SBOM {}'.format(args.ideal_sbom))
+                logging.error('Digital signature mismatch on ideal SBOM {}'.format(args.ideal_sbom))
+                exit(1)
 
         # check for signature on build sbom
         signature = spdx_utilities.get_digital_signature_from_spdx_document(build_sbom)
         if signature is not None:
             data = spdx_utilities.serialize_spdx_doc(build_sbom)
             if not signature_utilities.validate_signature(public_key, signature, data):
-                raise RuntimeError('Digital signature mismatch on ideal SBOM {}'.format(args.build_sbom))
+                logging.error('Digital signature mismatch on ideal SBOM {}'.format(args.build_sbom))
+                exit(1)
 
     # merge and test.
     successes = 0
@@ -129,15 +135,16 @@ def main():
         ideal_file_dict = ideal_files_by_name.get(build_file.name)
         if ideal_file_dict is None:
             build_file_dict['status'] = FileStatus.FILE_NOT_FOUND
-            logging.warning('File exists in build but not in ideal SBOM: {}'.format(build_file_name))
-            warnings += 1
+            if FileType.APPLICATION in build_file.file_types:
+                logging.warning('File exists in build but not in ideal SBOM: {}'.format(build_file_name))
+                warnings += 1
         else:
             ideal_file = ideal_file_dict['file']
             if isinstance(ideal_file.conc_lics, License):
                 ideal_file_sha256 = ideal_file.get_chk_sum(CHECKSUM_ALGORITHM).value
                 build_file_sha256 = build_file.get_chk_sum(CHECKSUM_ALGORITHM).value
                 if ideal_file_sha256 == build_file_sha256:
-                    logging.info('Merging data for third-party component {}'.format(build_file_name))
+                    logging.debug('Merging data for third-party component {}'.format(build_file_name))
                     build_file_dict['status'] = FileStatus.HASH_MATCH
                     ideal_file_dict['status'] = FileStatus.HASH_MATCH
                     # merge data from ideal file
@@ -169,13 +176,14 @@ def main():
         ideal_file = ideal_file_dict['file']
         status = ideal_file_dict['status']
         if status == 0:
-            logging.warning('File found in ideal SBOM but not build SBOM: {}'.format(ideal_file.name))
-            warnings += 1
+            if FileType.APPLICATION in ideal_file.file_types:
+                logging.warning('File found in ideal SBOM but not build SBOM: {}'.format(ideal_file.name))
+                warnings += 1
 
     if errors > 0:
-        logging.info('{} errors'.format(errors))
+        logging.warning('{} errors.'.format(errors))
     if warnings > 0:
-        logging.info('{} warnings'.format(warnings))
+        logging.warning('{} warnings.'.format(warnings))
     if third_party_dependencies_merged > 0:
         logging.info('{} third-party dependencies had data merged.'.format(third_party_dependencies_merged))
     if errors == 0 and warnings == 0:

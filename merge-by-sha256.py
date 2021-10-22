@@ -52,7 +52,8 @@ class FileStatus(object):
 # noinspection DuplicatedCode,SpellCheckingInspection
 def main():
     parser = argparse.ArgumentParser(description='merge-by-sha56')
-    parser.add_argument('--debug', action='store_true', help='output API debug data')
+    parser.add_argument('--debug', action='store_true', help='show logging informational output')
+    parser.add_argument('--info', action='store_true', help='show informational diagnostic output')
     parser.add_argument('--source-sbom', type=str, help='SBOM filename to read')
     parser.add_argument('--merge-sbom', type=str, help='SBOM file with data to merge')
     parser.add_argument('--result-sbom', type=str, help='SBOM filename to write')
@@ -62,8 +63,10 @@ def main():
 
     if args.debug:
         logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.DEBUG)
-    else:
+    elif args.info:
         logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
+    else:
+        logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.WARNING)
 
     if args.source_sbom is None:
         logging.error('--source-sbom file must be specified')
@@ -95,14 +98,16 @@ def main():
         if signature is not None:
             data = spdx_utilities.serialize_spdx_doc(source_sbom)
             if not signature_utilities.validate_signature(public_key, signature, data):
-                raise RuntimeError('Digital signature mismatch on source SBOM {}'.format(args.source_sbom))
+                logging.error('Digital signature mismatch on source SBOM {}'.format(args.source_sbom))
+                exit(1)
 
         # check for signature on build sbom
         signature = spdx_utilities.get_digital_signature_from_spdx_document(merge_sbom)
         if signature is not None:
             data = spdx_utilities.serialize_spdx_doc(merge_sbom)
             if not signature_utilities.validate_signature(public_key, signature, data):
-                raise RuntimeError('Digital signature mismatch on merge SBOM {}'.format(args.merge_sbom))
+                logging.error('Digital signature mismatch on merge SBOM {}'.format(args.merge_sbom))
+                exit(1)
 
     # merge and test.
     successes = 0
