@@ -197,6 +197,7 @@ def main():
     # write the result sbom spdx file.
     spdx_utilities.write_sbom_file(build_sbom, args.result_sbom)
     logging.info('done.')
+    exit(0 if errors == 0 and warnings == 0 else 13)
 
 
 if __name__ == "__main__":
