@@ -106,7 +106,7 @@ def main():
         if signature is not None:
             data = spdx_utilities.serialize_spdx_doc(build_sbom)
             if not signature_utilities.validate_signature(public_key, signature, data):
-                logging.error('Digital signature mismatch on ideal SBOM {}'.format(args.build_sbom))
+                logging.error('Digital signature mismatch on build SBOM {}'.format(args.build_sbom))
                 exit(1)
 
     # merge and test.
@@ -141,8 +141,8 @@ def main():
         else:
             ideal_file = ideal_file_dict['file']
             if isinstance(ideal_file.conc_lics, License):
-                ideal_file_sha256 = ideal_file.get_chk_sum(CHECKSUM_ALGORITHM).value
-                build_file_sha256 = build_file.get_chk_sum(CHECKSUM_ALGORITHM).value
+                ideal_file_sha256 = ideal_file.get_checksum(CHECKSUM_ALGORITHM).value
+                build_file_sha256 = build_file.get_checksum(CHECKSUM_ALGORITHM).value
                 if ideal_file_sha256 == build_file_sha256:
                     logging.debug('Merging data for third-party component {}'.format(build_file_name))
                     build_file_dict['status'] = FileStatus.HASH_MATCH

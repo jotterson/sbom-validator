@@ -33,15 +33,14 @@ import pathlib
 from spdx.writers.tagvalue import write_document, InvalidDocumentError
 from spdx.parsers.loggers import ErrorMessages
 from spdx.parsers.loggers import StandardLogger
-from spdx.document import Document, License  # , LicenseConjunction, ExtractedLicense
+from spdx.document import Document, License
 from spdx.version import Version
-from spdx.creationinfo import CreationInfo  # ,Person
+from spdx.creationinfo import CreationInfo
 from spdx.creationinfo import Tool
-# from spdx.review import Review
 from spdx.package import Package
 from spdx.file import File, FileType
 from spdx.checksum import Algorithm
-from spdx.utils import NoAssert, SPDXNone  # , UnKnown
+from spdx.utils import NoAssert, SPDXNone
 from spdx.parsers.tagvalue import Parser
 from spdx.parsers.tagvaluebuilders import Builder
 
@@ -282,7 +281,7 @@ def add_checksum_to_spdx_file(spdx_file, algorithm_name, hash_value):
     :param hash_value:  the base64 encoded hash digest string
     :return: the supplied, modified SPDX File object, just in case.
     """
-    spdx_file.chk_sums.append(Algorithm(algorithm_name, hash_value))
+    spdx_file.set_checksum(Algorithm(algorithm_name, hash_value))
     return spdx_file
 
 

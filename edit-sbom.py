@@ -38,7 +38,7 @@ import signature_utilities
 import spdx_utilities
 from spdx_utilities import add_signature_to_spdx_document, read_sbom_file, serialize_spdx_doc, write_sbom_file
 from spdx.document import License
-from spdx.utils import NoAssert, SPDXNone  # , UnKnown
+from spdx.utils import NoAssert, SPDXNone
 
 
 class SpdxFileFilesAsListModel(object):
@@ -118,7 +118,7 @@ class SpdxFileFilesAsListModel(object):
                     'notice': self.current_file.notice,
                     }
             for hash_name in ['SHA1', 'SHA256']:
-                hash_value = self.current_file.get_chk_sum(hash_name)
+                hash_value = self.current_file.get_checksum(hash_name)
                 if hash_value is not None:
                     value = hash_value.value
                 else:

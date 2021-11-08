@@ -57,8 +57,10 @@ def calculate_hash_for_file(filename, hash_name='sha256'):
     """
     calculate the hash for a file.
     returns a string containing the hex value of the hash.
-    hash_name can be sha256, sha512, md5, sha1, etc.  only the names shown here are tested. YMMV.
+    hash_name can be sha1, sha256, sha512.  only the names shown here are tested. YMMV.
     """
+    if hash_name not in ['sha1', 'sha256', 'sha512']:
+        raise ValueError('unknown hash algorithm {}'.format(hash_name))
     hasher = hashlib.new(hash_name)
     with open(filename, 'rb') as fh:
         while True:

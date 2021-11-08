@@ -194,7 +194,7 @@ def main():
     logging.info('Reading file {}'.format(args.sbom_file))
     new_doc = read_sbom_file(args.sbom_file)
 
-    if True:  # debug
+    if args.debug:
         if args.private_key:
             public_key = signature_utilities.read_ssh_public_key(args.private_key + '.pub')
         else:
