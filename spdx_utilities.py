@@ -192,12 +192,11 @@ def guess_spdx_file_type_from_data(data):
         if is_text:
             return [FileType.OTHER, FileType.TEXT]
         else:
-            #  logging.warning('guess_spdx_file_type_from_data() could not guess.')
             return [FileType.BINARY, FileType.OTHER]
     return [FileType.BINARY, FileType.OTHER]
 
 
-def new_spdx_doc(name='SimpleSPDX', namespace='https://www.example.com/example', toolname='unknown tool'):
+def new_spdx_doc(name='SPDX-SBOM', namespace='https://www.example.com/example', toolname='unknown tool'):
     """
     create a new SPDX SBOM doc
     :param name: name of new SPDX document
@@ -212,7 +211,6 @@ def new_spdx_doc(name='SimpleSPDX', namespace='https://www.example.com/example',
     doc.comment = 'Signature: none'
     doc.namespace = namespace
     doc.data_license = License.from_identifier("CC0-1.0")
-    #  doc.creation_info.add_creator(Person("Alice", "alice@example.com"))
     doc.creation_info.add_creator(Tool(toolname))
     doc.creation_info.set_created_now()
     return doc
@@ -227,7 +225,6 @@ def new_spdx_pkg(spdx_id, name, version, file_name=None):
     :param file_name: a file name to associate with the Package.
     :return: the new Package object
     """
-    # Package
     package = Package()
     package.name = name
     package.version = version
@@ -235,20 +232,10 @@ def new_spdx_pkg(spdx_id, name, version, file_name=None):
         package.file_name = file_name
     package.spdx_id = spdx_id
     package.download_location = NoAssert()  # "NOASSERTION"
-    #  package.homepage = SPDXNone()
-    #  license_set = LicenseConjunction(
-    #    License.from_identifier("Apache-2.0"), License.from_identifier("BSD-2-Clause")
-    #  )
     package.conc_lics = NoAssert()
     package.license_declared = NoAssert()
     package.add_lics_from_file(NoAssert())
-    #  package.conc_lics = license_set
-    #  package.license_declared = license_set
-    #  package.add_lics_from_file(License.from_identifier("Apache-2.0"))
-    #  package.add_lics_from_file(License.from_identifier("BSD-2-Clause"))
     package.cr_text = NoAssert()
-    #  package.summary = "Simple package."
-    #  package.description = "Really simple package."
     return package
 
 
@@ -267,9 +254,6 @@ def new_spdx_file(filename, spdx_id, comment=None):
     spdx_file.conc_lics = NoAssert()
     spdx_file.add_lics(NoAssert())
     spdx_file.copyright = NoAssert()
-    #  spdx_file.add_artifact("name", "TagWriteTest")
-    #  spdx_file.add_artifact("home", UnKnown())
-    #  spdx_file.add_artifact("uri", "http://tagwritetest.test")
     return spdx_file
 
 
@@ -297,9 +281,7 @@ def read_sbom_file(filename):
         data = f.read()
         document, error = p.parse(data)
     if error:
-        print(error)
-        logging.error(error)
-        return None
+        logging.warning('Error reading {}'.format(filename))
     return document
 
 
@@ -394,6 +376,20 @@ def serialize_spdx_package_info(spdx_package):
                 files = sorted(v, key=lambda f: f.spdx_id)
                 for item in files:
                     result += serialize_spdx_file_info(item)
+            elif k == 'checksums':
+                result += '|{}:['.format(k)
+                checksums = []
+                for chk_sum in v:
+                    checksums.append('{}:{}'.format(chk_sum.identifier, chk_sum.value))
+                first = True
+                for checksum in sorted(checksums):
+                    if first:
+                        result += checksum
+                        first = False
+                    else:
+                        result += ',{}'.format(checksum)
+                        #pass
+                result += ']'
             else:
                 result += '|{}:['.format(k)
                 first = True
@@ -431,7 +427,7 @@ def serialize_spdx_file_info(spdx_file):
             result += serialize_spdx_license(v)
         elif isinstance(v, list):
             result += '|{}:['.format(k)
-            if k == 'chk_sums':
+            if k == 'checksums':
                 checksums = []
                 for chk_sum in v:
                     checksums.append('{}:{}'.format(chk_sum.identifier, chk_sum.value))

@@ -36,6 +36,7 @@ import os
 from zipfile import ZipFile
 
 import signature_utilities
+from spdx.checksum import Algorithm
 from spdx_utilities import \
     add_checksum_to_spdx_file, \
     add_signature_to_spdx_document, \
@@ -49,8 +50,9 @@ from spdx_utilities import \
     set_spdx_file_type, \
     serialize_spdx_doc, \
     write_sbom_file
-from validation_utilities import calculate_hash_for_file, files_in_dir
+from validation_utilities import files_in_dir
 
+HASH_NAMES = ['sha1', 'sha256']
 spdx_id_counter = 0
 
 
@@ -62,6 +64,10 @@ def new_spdx_id():
 
 def package_path_to_spdx_doc(args):
     package_path = args.package_path
+    package_hashers = {}
+    for hash_name in HASH_NAMES:
+        package_hashers[hash_name] = hashlib.new(hash_name)
+
     spdx_doc = new_spdx_doc(toolname='create-sbom.py')
     package_name = package_path
     if package_name[-1] == '/':
@@ -80,12 +86,22 @@ def package_path_to_spdx_doc(args):
         spdx_file = new_spdx_file(filename=file, spdx_id=new_spdx_id())
         if args.file_comment is not None:
             spdx_file.comment = args.file_comment
-        hash_names = ['sha1', 'sha256']
-        for hash_name in hash_names:
-            hash_value = calculate_hash_for_file(full_path, hash_name)
-            add_checksum_to_spdx_file(spdx_file, hash_name.upper(), hash_value)
+        for hash_name in HASH_NAMES:
+            hasher = hashlib.new(hash_name)
+            with open(full_path, 'rb') as fh:
+                while True:
+                    block = fh.read(64*1024)
+                    if not block:
+                        break
+                    hasher.update(block)
+                    package_hashers[hash_name].update(block)
+            add_checksum_to_spdx_file(spdx_file, hash_name.upper(), hasher.hexdigest())
         set_spdx_file_type(spdx_file, full_path)
         spdx_pkg.add_file(spdx_file)
+
+    # update package hashes
+    for hash_name in HASH_NAMES:
+        spdx_pkg.set_checksum(Algorithm(hash_name.upper(), package_hashers[hash_name].hexdigest()))
 
     # update pkg verification code.
     spdx_pkg.verif_code = spdx_pkg.calc_verif_code()
@@ -94,10 +110,15 @@ def package_path_to_spdx_doc(args):
 
 
 def package_zip_to_spdx_doc(args):
+    package_hashers = {}
+    for hash_name in HASH_NAMES:
+        package_hashers[hash_name] = hashlib.new(hash_name)
+
     package_zip = args.package_zip
     spdx_doc = new_spdx_doc(toolname='create-sbom.py')
     _, package_name = os.path.split(package_zip)
     spdx_pkg = new_spdx_pkg(spdx_id=new_spdx_id(), name=package_name, version='0.0.0', file_name=package_name)
+
     logging.info('Enumerating files in {}...'.format(package_zip))
     with ZipFile(package_zip, 'r') as zipfile:
         namelist = zipfile.namelist()
@@ -113,10 +134,10 @@ def package_zip_to_spdx_doc(args):
             if args.file_comment is not None:
                 spdx_file.comment = args.comment
             data = zipfile.read(file)
-            hash_names = ['sha1', 'sha256']
-            for hash_name in hash_names:
+            for hash_name in HASH_NAMES:
                 hasher = hashlib.new(hash_name)
                 hasher.update(data)
+                package_hashers[hash_name].update(data)
                 add_checksum_to_spdx_file(spdx_file, hash_name.upper(), hasher.hexdigest())
             spdx_file_types = guess_spdx_file_type_from_extension(file)
             if spdx_file_types is None:
@@ -125,6 +146,10 @@ def package_zip_to_spdx_doc(args):
                 logging.error('bad... {}'.format(file))
             spdx_file.file_types = spdx_file_types
             spdx_pkg.add_file(spdx_file)
+
+    # update package hashes
+    for hash_name in HASH_NAMES:
+        spdx_pkg.set_checksum(Algorithm(hash_name.upper(), package_hashers[hash_name].hexdigest()))
 
     # update pkg verification code.
     spdx_pkg.verif_code = spdx_pkg.calc_verif_code()
