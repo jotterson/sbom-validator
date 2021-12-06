@@ -55,6 +55,10 @@ not fully comply with the SPDX-2.1 standard, there is no support
 for multiple file types, and no support for multiple file
 checksums.  Consequently, this currently uses a patched
 library.  The patched library is currently at
-https://github.com/jotterson/tools-python
+https://github.com/jotterson/tools-python -- you can install it like this:
 
-J.B. Otterson 20211022
+```shell
+pip install git+https://github.com/jotterson/tools-python.git@checksums_final#egg=spdx-tools
+```
+
+J.B. Otterson 20211206
