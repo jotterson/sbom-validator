@@ -175,7 +175,7 @@ def probe_file(filename):
 
 def guess_spdx_file_type_from_data(data):
     """
-    guess a file's SPDX file type by looking at a little bit of data
+    guess a file's SPDX file type by looking at the first several hundred bytes of data
     :param data: a byte list to inspect
     :return: a list of SPDX File Types
     """
@@ -388,7 +388,6 @@ def serialize_spdx_package_info(spdx_package):
                         first = False
                     else:
                         result += ',{}'.format(checksum)
-                        #pass
                 result += ']'
             else:
                 result += '|{}:['.format(k)

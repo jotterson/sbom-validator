@@ -35,7 +35,6 @@ import signature_utilities
 import spdx_utilities
 
 CHECKSUM_ALGORITHM = 'SHA256'  # MUST be uppercase.
-MAGIC = '*BUILD-OUTPUT*'
 
 
 class FileStatus(object):

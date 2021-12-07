@@ -28,12 +28,13 @@ OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import base64
 
+from cryptography import x509
 from cryptography.exceptions import InvalidSignature
 # noinspection PyProtectedMember
 from cryptography.hazmat.backends.openssl.rsa import _RSAPrivateKey, _RSAPublicKey
 from cryptography.hazmat.primitives.serialization import ssh
 from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, serialization
 
 
 def create_signature(private_key, data_to_sign):
@@ -72,7 +73,7 @@ def validate_signature(public_key, signature, data_to_validate):
 
 def read_ssh_public_key(filename):
     """
-    read a RSA public key from a SSH key file, like the one that you could create with ssh-keygen
+    read an RSA public key from an SSH key file, like the one that you could create with ssh-keygen
     :param filename: the name of the file to read
     :return: the RSA Public Key
     """
@@ -86,12 +87,43 @@ def read_ssh_public_key(filename):
 
 def read_ssh_private_key(filename):
     """
-    read a RSA private key from a SSH key file, like the one that you could create with ssh-keygen
+    read an RSA private key from an SSH key file, like the one that you could create with ssh-keygen
     :param filename: the name of the file to read
     :return: the RSA Private Key
     """
     with open(filename, 'rb') as key_file:
         key = ssh.load_ssh_private_key(key_file.read(), password=b'')
+    if isinstance(key, _RSAPrivateKey):
+        return key
+    else:
+        raise Exception('{} is not a RSA Private Key'.format(filename))
+
+
+def read_rsa_public_key_from_x509_cert(filename):
+    """
+    read an RSA public key from an X.509 PEM file
+    :param filename: the certificate PEM file to read
+    :return: an RSA public key
+    """
+    with open(filename, 'rb') as cert_file:
+        cert = x509.load_pem_x509_certificate(cert_file.read())
+    if not isinstance(cert, x509.Certificate):
+        raise Exception('{} is not a x509 certificate'.format(filename))
+    key = cert.public_key()
+    if isinstance(key, _RSAPublicKey):
+        return key
+    else:
+        raise Exception('{} does not contain a RSA public key/'.format(filename))
+
+
+def read_rsa_private_key(filename):
+    """
+    read an RSA private key from a PEM file
+    :param filename: the name of the PEM file that contains the private key data
+    :return: the RSA private key data
+    """
+    with open(filename, 'rb') as key_file:
+        key = serialization.load_pem_private_key(key_file.read(), password=None)
     if isinstance(key, _RSAPrivateKey):
         return key
     else:
