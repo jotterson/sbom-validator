@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-sbom_editor.py -- this script provides simple edit to file data in a SBOM file.
+this script provides edits to file data in a SBOM file.
 """
 __author__ = 'J. B. Otterson'
 __copyright__ = """

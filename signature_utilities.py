@@ -1,6 +1,6 @@
 #!/bin/false
 """
-this file contains hopefully useful functions for digital signature.
+this file contains useful functions for digital signature.
 """
 __author__ = 'J. B. Otterson'
 __copyright__ = """
