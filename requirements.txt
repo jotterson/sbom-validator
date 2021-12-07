@@ -5,3 +5,7 @@ PyYAML~=5.4.1
 click~=8.0.1
 asciimatics~=1.13.0
 cryptography~=3.4.8
+#
+# use modified version of spdx-tools
+#
+git+https://github.com/jotterson/tools-python.git@checksums_final#egg=spdx-tools
