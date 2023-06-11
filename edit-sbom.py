@@ -36,8 +36,9 @@ from asciimatics.exceptions import NextScene, ResizeScreenError, StopApplication
 
 import signature_utilities
 import spdx_utilities
-from spdx_utilities import add_signature_to_spdx_document, read_sbom_file, serialize_spdx_doc, write_sbom_file
-from spdx.document import License
+from spdx_utilities import add_signature_to_spdx_document, read_spdx_file, serialize_spdx_doc, write_spdx_file
+from spdx.checksum import ChecksumAlgorithm
+from spdx.license import License
 from spdx.utils import NoAssert, SPDXNone
 
 
@@ -49,7 +50,7 @@ class SpdxFileFilesAsListModel(object):
         self.filename = filename
         self.public_key = public_key
         self.private_key = private_key
-        self.spdx_doc = read_sbom_file(filename)
+        self.spdx_doc = read_spdx_file(filename)
         if self.public_key is not None:
             # validate signature
             data = spdx_utilities.serialize_spdx_doc(self.spdx_doc)
@@ -57,10 +58,7 @@ class SpdxFileFilesAsListModel(object):
             if signature is not None:
                 if not signature_utilities.validate_signature(public_key, signature, data):
                     raise RuntimeError('Digital signature mismatch')
-        files = []
-        for package in self.spdx_doc.packages:
-            files.extend(package.files)
-        self.files = files
+        self.files = self.spdx_doc.files
         self.files_by_spdxid = {}
         if len(self.files) > 0:
             self.current_file = self.files[0]
@@ -118,7 +116,8 @@ class SpdxFileFilesAsListModel(object):
                     'notice': self.current_file.notice,
                     }
             for hash_name in ['SHA1', 'SHA256']:
-                hash_value = self.current_file.get_checksum(hash_name)
+                algo = ChecksumAlgorithm.checksum_algorithm_from_string(hash_name)
+                hash_value = self.current_file.get_checksum(algo)
                 if hash_value is not None:
                     value = hash_value.value
                 else:
@@ -171,10 +170,8 @@ class SpdxFileFilesAsListModel(object):
         :param file: the spdx file to delete
         :return: None
         """
-        for package in self.spdx_doc.packages:
-            if file in package.files:
-                package.files.remove(file)
-                break
+        if file in self.spdx_doc.files:
+            self.spdx_doc.files.remove(file)
         if file in self.files:
             self.files.remove(file)
 
@@ -189,7 +186,8 @@ class SpdxFileFilesAsListModel(object):
                                                              serialize_spdx_doc(self.spdx_doc))
             add_signature_to_spdx_document(self.spdx_doc, signature)
         # write the spdx file.
-        write_sbom_file(self.spdx_doc, self.filename)
+        logging.info(f'saving file {self.filename}')
+        write_spdx_file(self.spdx_doc, self.filename)
 
 
 class ListView(Frame):
@@ -376,9 +374,11 @@ def main():
 
     # noinspection PyGlobalUndefined
     global spdx_files_list_model
+    logging.info('starting...')
     spdx_files_list_model = SpdxFileFilesAsListModel(filename=args.sbom_file,
                                                      public_key=public_key,
                                                      private_key=private_key)
+    logging.info('prepared model')
     last_scene = None
     while True:
         try:

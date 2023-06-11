@@ -1,4 +1,6 @@
 .idea/
 venv/
+data/
+sample/
 *.spdx
 __pycache__/

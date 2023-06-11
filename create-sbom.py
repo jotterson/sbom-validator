@@ -36,7 +36,7 @@ import os
 from zipfile import ZipFile
 
 import signature_utilities
-from spdx.checksum import Algorithm
+from spdx.checksum import Checksum, ChecksumAlgorithm
 from spdx_utilities import \
     add_checksum_to_spdx_file, \
     add_signature_to_spdx_document, \
@@ -46,46 +46,46 @@ from spdx_utilities import \
     new_spdx_doc, \
     new_spdx_file, \
     new_spdx_pkg, \
-    read_sbom_file, \
+    read_spdx_file, \
     set_spdx_file_type, \
     serialize_spdx_doc, \
-    write_sbom_file
+    write_spdx_file
 from validation_utilities import files_in_dir
 
-HASH_NAMES = ['sha1', 'sha256']
+HASH_NAMES = ['SHA1', 'SHA256']
 spdx_id_counter = 0
 
 
 def new_spdx_id():
     global spdx_id_counter
     spdx_id_counter += 1
-    return 'SPDXRef-{:06d}'.format(spdx_id_counter)
+    return f'SPDXRef-{spdx_id_counter:06d}'
 
 
 def package_path_to_spdx_doc(args):
     package_path = args.package_path
-    package_hashers = {}
-    for hash_name in HASH_NAMES:
-        package_hashers[hash_name] = hashlib.new(hash_name)
-
-    spdx_doc = new_spdx_doc(toolname='create-sbom.py')
     package_name = package_path
     if package_name[-1] == '/':
         package_name = package_name[0:-1]
     _, package_name = os.path.split(package_name)
-    spdx_pkg = new_spdx_pkg(spdx_id=new_spdx_id(), name='Example', version='0.0.0', file_name=package_name)
 
-    logging.info('Enumerating files at {}...'.format(package_path))
+    spdx_doc = new_spdx_doc(name=package_name, toolname='create-sbom.py')
+    # spdx_pkg = new_spdx_pkg(spdx_id=new_spdx_id(), name='Example', version='0.0.0', file_name=package_name)
+    # spdx_doc.add_package(spdx_pkg)
+
+    logging.info(f'Enumerating files at {package_path}')
     files = files_in_dir(package_path)
-    logging.info('Directory enumeration found {} files'.format(len(files)))
-    # add all the discovered files to the package.
+    logging.info(f'Directory enumeration found {len(files)} files')
+    # add all the discovered files to the SPDX DOCUMENT
     for file in files:
-        full_path = '{}/{}'.format(package_path, file)
+        full_path = f'{package_path}/{file}'
         if args.flat:
             _, file = os.path.split(file)
         spdx_file = new_spdx_file(filename=file, spdx_id=new_spdx_id())
         if args.file_comment is not None:
             spdx_file.comment = args.file_comment
+        else:
+            spdx_file.comment = f'found during scan of {package_name}'
         for hash_name in HASH_NAMES:
             hasher = hashlib.new(hash_name)
             with open(full_path, 'rb') as fh:
@@ -94,36 +94,24 @@ def package_path_to_spdx_doc(args):
                     if not block:
                         break
                     hasher.update(block)
-                    package_hashers[hash_name].update(block)
             add_checksum_to_spdx_file(spdx_file, hash_name.upper(), hasher.hexdigest())
         set_spdx_file_type(spdx_file, full_path)
-        spdx_pkg.add_file(spdx_file)
-
-    # update package hashes
-    for hash_name in HASH_NAMES:
-        spdx_pkg.set_checksum(Algorithm(hash_name.upper(), package_hashers[hash_name].hexdigest()))
-
-    # update pkg verification code.
-    spdx_pkg.verif_code = spdx_pkg.calc_verif_code()
-    spdx_doc.add_package(spdx_pkg)
+        spdx_doc.add_file(spdx_file)
     return spdx_doc
 
 
 def package_zip_to_spdx_doc(args):
-    package_hashers = {}
-    for hash_name in HASH_NAMES:
-        package_hashers[hash_name] = hashlib.new(hash_name)
-
     package_zip = args.package_zip
-    spdx_doc = new_spdx_doc(toolname='create-sbom.py')
     _, package_name = os.path.split(package_zip)
-    spdx_pkg = new_spdx_pkg(spdx_id=new_spdx_id(), name=package_name, version='0.0.0', file_name=package_name)
+    spdx_doc = new_spdx_doc(name=package_name, toolname='create-sbom.py')
+    # spdx_pkg = new_spdx_pkg(spdx_id=new_spdx_id(), name=package_name, version='0.0.0', file_name=package_name)
+    # spdx_doc.add_package(spdx_pkg)
 
-    logging.info('Enumerating files in {}...'.format(package_zip))
+    logging.info(f'Enumerating files in {package_zip}')
     with ZipFile(package_zip, 'r') as zipfile:
         namelist = zipfile.namelist()
         files = list(filter(lambda name: not name.endswith('/'), namelist))
-        logging.info('Zipfile contains {} files'.format(len(files)))
+        logging.info(f'Zipfile contains {len(files)} files.')
         for file in files:
             if args.flat:
                 _, filename = os.path.split(file)
@@ -133,27 +121,20 @@ def package_zip_to_spdx_doc(args):
             spdx_file = new_spdx_file(filename=filename, spdx_id=new_spdx_id())
             if args.file_comment is not None:
                 spdx_file.comment = args.comment
+            else:
+                spdx_file.comment = f'found during scan of {package_name}'
             data = zipfile.read(file)
             for hash_name in HASH_NAMES:
                 hasher = hashlib.new(hash_name)
                 hasher.update(data)
-                package_hashers[hash_name].update(data)
                 add_checksum_to_spdx_file(spdx_file, hash_name.upper(), hasher.hexdigest())
             spdx_file_types = guess_spdx_file_type_from_extension(file)
             if spdx_file_types is None:
                 spdx_file_types = guess_spdx_file_type_from_data(data)
             if spdx_file_types is None or len(spdx_file_types) == 0:
-                logging.error('bad... {}'.format(file))
+                logging.error(f'bad... {file}')
             spdx_file.file_types = spdx_file_types
-            spdx_pkg.add_file(spdx_file)
-
-    # update package hashes
-    for hash_name in HASH_NAMES:
-        spdx_pkg.set_checksum(Algorithm(hash_name.upper(), package_hashers[hash_name].hexdigest()))
-
-    # update pkg verification code.
-    spdx_pkg.verif_code = spdx_pkg.calc_verif_code()
-    spdx_doc.add_package(spdx_pkg)
+            spdx_doc.add_file(spdx_file)
     return spdx_doc
 
 
@@ -169,13 +150,15 @@ def main():
     parser.add_argument('--private-key', type=str, help='private key for signing SBOM')
     args = parser.parse_args()
 
+    log_format = '%(asctime)s %(levelname)s %(message)s'
+    log_date_format = '%Y-%m-%d %H:%M:%S'
     if args.debug:
-        logging.basicConfig(format='%(message)s', level=logging.DEBUG)
+        logging.basicConfig(format=log_format, datefmt=log_date_format, level=logging.DEBUG)
     else:
-        logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
+        logging.basicConfig(format=log_format, datefmt=log_date_format, level=logging.INFO)
 
     if args.package_path is None and args.package_zip is None:
-        logging.error('--package-path or --package-zip must be supplied')
+        logging.error('one of --package-path or --package-zip must be supplied')
         exit(1)
 
     if args.package_path is not None and args.package_zip is not None:
@@ -195,29 +178,31 @@ def main():
 
     if args.package_path is not None:
         if not os.path.isdir(args.package_path):
-            logging.error('package-path "{}" is not a directory.'.format(args.package_path))
+            logging.error(f'package-path "{args.package_path}" is not a directory.')
             exit(1)
         spdx_doc = package_path_to_spdx_doc(args)
 
     if args.package_zip is not None:
         if not os.path.exists(args.package_zip):
-            logging.error('package-zip {} not found'.format(args.package_zip))
+            logging.error(f'package-zip {args.package_zip} not found')
             exit(1)
         spdx_doc = package_zip_to_spdx_doc(args)
 
     # sign the spdx file if the private key was specified
     if private_key:
+        logging.info(f'Signing file {args.sbom_file}')
+        written_file_serialized_data = serialize_spdx_doc(spdx_doc)
         signature = signature_utilities.create_signature(private_key,
-                                                         serialize_spdx_doc(spdx_doc))
+                                                         written_file_serialized_data)
         add_signature_to_spdx_document(spdx_doc, signature)
 
     # write the spdx file.
-    logging.info('Writing file {}'.format(args.sbom_file))
-    write_sbom_file(spdx_doc, args.sbom_file)
+    logging.info(f'Writing file {args.sbom_file}')
+    write_spdx_file(spdx_doc, args.sbom_file)
 
     # read the spdx file for basic verification
-    logging.info('Reading file {}'.format(args.sbom_file))
-    new_doc = read_sbom_file(args.sbom_file)
+    logging.info(f'Reading file {args.sbom_file}')
+    new_doc = read_spdx_file(args.sbom_file)
 
     if args.debug:
         if args.private_key:
@@ -225,16 +210,16 @@ def main():
         else:
             public_key = None
         if public_key:
+            logging.info('Validating digital signature')
             # validate digital signature on sbom document data
-            new_doc_data = serialize_spdx_doc(new_doc)
+            read_doc_serialized_data = serialize_spdx_doc(new_doc)
             signature = get_digital_signature_from_spdx_document(new_doc)
-            if not signature_utilities.validate_signature(public_key, signature, new_doc_data):
+            if not signature_utilities.validate_signature(public_key, signature, read_doc_serialized_data):
                 logging.error('Digital signature mismatch')
                 exit(13)
             else:
                 logging.info('Digital signature on SBOM file is good.')
-        logging.info('SBOM file contains {} file entries'.format(len(new_doc.packages[0].files)))
-
+        logging.info(f'SBOM file contains {len(new_doc.files)} file entries')
     exit(0)
 
 

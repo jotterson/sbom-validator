@@ -37,8 +37,7 @@ from spdx.file import FileType
 
 import signature_utilities
 import spdx_utilities
-from spdx_utilities import read_sbom_file
-from validation_utilities import calculate_hash_for_file, files_in_dir
+import validation_utilities
 
 
 def validate_package_path(package_path, sbom_files):
@@ -49,7 +48,7 @@ def validate_package_path(package_path, sbom_files):
     :return: True if package passes integrity verification.
     """
     logging.info('Enumerating files in {}...'.format(package_path))
-    files = files_in_dir(package_path)
+    files = validation_utilities.files_in_dir(package_path)
     logging.info('Directory enumeration found {} files'.format(len(files)))
 
     sbom_file_name_map = {}
@@ -85,7 +84,7 @@ def validate_package_path(package_path, sbom_files):
     # now compare checksums for all files that are both on disk and in the SBOM.
     mismatched_files = 0
     unchecked_files = 0
-    hash_algorithm = 'sha256'
+    hash_algorithm = 'SHA256'
     for file, file_dict in files_on_disk.items():
         if file_dict.get('found_in_sbom'):
             sbom_file = file_dict.get('sbom_file')
@@ -99,7 +98,9 @@ def validate_package_path(package_path, sbom_files):
                 if sbom_file_hash_value is None:
                     logging.error('Cannot get {} hash value for file {}.'.format(hash_algorithm, file))
                     exit(1)
-                disk_file_hash_value = calculate_hash_for_file('{}/{}'.format(package_path, file), hash_algorithm)
+                disk_file_hash_value = validation_utilities.calculate_hash_for_file('{}/{}'.format(package_path,
+                                                                                                   file),
+                                                                                    hash_algorithm)
                 # now compare the hashes
                 if sbom_file_hash_value != disk_file_hash_value:
                     # danger will robinson!
@@ -259,7 +260,7 @@ def main():
     # read the spdx file that will be used for validation
     logging.info('Reading SBOM file {}'.format(args.sbom_file))
 
-    new_doc = read_sbom_file(args.sbom_file)
+    new_doc = spdx_utilities.read_spdx_file(args.sbom_file)
     if new_doc is not None:
         logging.info('SBOM file contains {} file entries'.format(len(new_doc.packages[0].files)))
     else:
@@ -276,9 +277,7 @@ def main():
         else:
             logging.info('Digital signature on SBOM file is good.  SBOM file appears authentic.')
     # get all files from all packages in the sbom into a list.
-    sbom_files = []
-    for package in new_doc.packages:
-        sbom_files.extend(package.files)
+    sbom_files = new_doc.files
 
     result = False
     if package_path is not None:

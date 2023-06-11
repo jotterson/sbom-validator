@@ -33,10 +33,11 @@ import logging
 
 import signature_utilities
 import spdx_utilities
-from spdx.document import License
+from spdx.license import License
 from spdx.file import FileType
+from spdx.checksum import ChecksumAlgorithm
 
-CHECKSUM_ALGORITHM = 'SHA256'  # MUST be uppercase.
+CHECKSUM_ALGORITHM = ChecksumAlgorithm.SHA256
 
 
 class FileStatus(object):
@@ -61,22 +62,24 @@ def main():
     parser.add_argument('--public-key', type=str, help='path to rsa public key used for digital signature validation')
     args = parser.parse_args()
 
+    log_format = '%(asctime)s %(levelname)s %(message)s'
+    log_date_format = '%Y-%m-%d %H:%M:%S'
     if args.debug:
-        logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.DEBUG)
+        logging.basicConfig(format=log_format, datefmt=log_date_format, level=logging.DEBUG)
     elif args.info:
-        logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
+        logging.basicConfig(format=log_format, datefmt=log_date_format, level=logging.INFO)
     else:
-        logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.WARNING)
+        logging.basicConfig(format=log_format, datefmt=log_date_format, level=logging.WARNING)
 
     if args.ideal_sbom is None:
         logging.error('--ideal-sbom file must be specified')
         exit(1)
-    ideal_sbom = spdx_utilities.read_sbom_file(args.ideal_sbom)
+    ideal_sbom = spdx_utilities.read_spdx_file(args.ideal_sbom)
 
     if args.build_sbom is None:
         logging.error('--build-sbom file must be specified')
         exit(1)
-    build_sbom = spdx_utilities.read_sbom_file(args.build_sbom)
+    build_sbom = spdx_utilities.read_spdx_file(args.build_sbom)
 
     if args.result_sbom is None:
         logging.error('--result-sbom file must be specified')
@@ -114,12 +117,8 @@ def main():
     warnings = 0
     errors = 0
     third_party_dependencies_merged = 0
-    ideal_files = []
-    for package in ideal_sbom.packages:
-        ideal_files.extend(package.files)
-    build_files = []
-    for package in build_sbom.packages:
-        build_files.extend(package.files)
+    ideal_files = ideal_sbom.files
+    build_files = build_sbom.files
 
     build_files_by_name = {}
     for file in build_files:
@@ -195,7 +194,7 @@ def main():
                                                          spdx_utilities.serialize_spdx_doc(build_sbom))
         spdx_utilities.add_signature_to_spdx_document(build_sbom, signature)
     # write the result sbom spdx file.
-    spdx_utilities.write_sbom_file(build_sbom, args.result_sbom)
+    spdx_utilities.write_spdx_file(build_sbom, args.result_sbom)
     logging.info('done.')
     exit(0 if errors == 0 and warnings == 0 else 13)
 

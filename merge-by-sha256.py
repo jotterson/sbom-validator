@@ -33,8 +33,9 @@ import os
 
 import signature_utilities
 import spdx_utilities
+from spdx.checksum import ChecksumAlgorithm
 
-CHECKSUM_ALGORITHM = 'SHA256'  # MUST be uppercase.
+CHECKSUM_ALGORITHM = ChecksumAlgorithm.SHA256
 
 
 class FileStatus(object):
@@ -60,22 +61,24 @@ def main():
     parser.add_argument('--public-key', type=str, help='path to rsa public key used for digital signature validation')
     args = parser.parse_args()
 
+    log_format = '%(asctime)s %(levelname)s %(message)s'
+    log_date_format = '%Y-%m-%d %H:%M:%S'
     if args.debug:
-        logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.DEBUG)
+        logging.basicConfig(format=log_format, datefmt=log_date_format, level=logging.DEBUG)
     elif args.info:
-        logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
+        logging.basicConfig(format=log_format, datefmt=log_date_format, level=logging.INFO)
     else:
-        logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.WARNING)
+        logging.basicConfig(format=log_format, datefmt=log_date_format, level=logging.WARNING)
 
     if args.source_sbom is None:
         logging.error('--source-sbom file must be specified')
         exit(1)
-    source_sbom = spdx_utilities.read_sbom_file(args.source_sbom)
+    source_sbom = spdx_utilities.read_spdx_file(args.source_sbom)
 
     if args.merge_sbom is None:
         logging.error('--merge-sbom file must be specified')
         exit(1)
-    merge_sbom = spdx_utilities.read_sbom_file(args.merge_sbom)
+    merge_sbom = spdx_utilities.read_spdx_file(args.merge_sbom)
 
     if args.result_sbom is None:
         logging.error('--result-sbom file must be specified')
@@ -112,12 +115,8 @@ def main():
     successes = 0
     warnings = 0
     errors = 0
-    source_files = []
-    for package in source_sbom.packages:
-        source_files.extend(package.files)
-    merge_files = []
-    for package in merge_sbom.packages:
-        merge_files.extend(package.files)
+    source_files = source_sbom.files
+    merge_files = merge_sbom.files
 
     build_files_by_name = {}
     for file in source_files:
@@ -168,7 +167,7 @@ def main():
                                                          spdx_utilities.serialize_spdx_doc(source_sbom))
         spdx_utilities.add_signature_to_spdx_document(source_sbom, signature)
     # write the result sbom spdx file.
-    spdx_utilities.write_sbom_file(source_sbom, args.result_sbom)
+    spdx_utilities.write_spdx_file(source_sbom, args.result_sbom)
     logging.info('done.')
 
 

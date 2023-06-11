@@ -30,19 +30,25 @@ import codecs
 import logging
 import pathlib
 
-from spdx.writers.tagvalue import write_document, InvalidDocumentError
+import spdx.writers.tagvalue as tv_writer
+import spdx.writers.json as json_writer
+
 from spdx.parsers.loggers import ErrorMessages
 from spdx.parsers.loggers import StandardLogger
-from spdx.document import Document, License
+from spdx.checksum import Checksum, ChecksumAlgorithm
+from spdx.document import Document
+from spdx.license import License
 from spdx.version import Version
 from spdx.creationinfo import CreationInfo
 from spdx.creationinfo import Tool
 from spdx.package import Package
 from spdx.file import File, FileType
-from spdx.checksum import Algorithm
 from spdx.utils import NoAssert, SPDXNone
-from spdx.parsers.tagvalue import Parser
-from spdx.parsers.tagvaluebuilders import Builder
+
+from spdx.parsers.tagvalue import Parser as TVParser
+from spdx.parsers.jsonparser import Parser as JsonParser
+from spdx.parsers.tagvaluebuilders import Builder as TVBuilder
+from spdx.parsers.jsonyamlxmlbuilders import Builder as JsonBuilder
 
 
 PARTIAL_LICENSES_LIST = [
@@ -119,6 +125,8 @@ file_extension_to_spdx_file_type_mapping = {
     '.pdf': [FileType.IMAGE, FileType.OTHER],
     '.png': [FileType.IMAGE, FileType.OTHER],
     '.properties': [FileType.TEXT, FileType.OTHER],
+    '.py': [FileType.TEXT, FileType.APPLICATION, FileType.OTHER],
+    '.pyd': [FileType.APPLICATION, FileType.BINARY],
     '.rb': [FileType.TEXT, FileType.APPLICATION, FileType.OTHER],
     '.sh': [FileType.TEXT, FileType.APPLICATION, FileType.OTHER],
     '.so': [FileType.TEXT, FileType.APPLICATION, FileType.BINARY],
@@ -205,7 +213,7 @@ def new_spdx_doc(name='SPDX-SBOM', namespace='https://www.example.com/example', 
     :return: the new SPDX Document object
     """
     doc = Document()
-    doc.version = Version(2, 1)
+    doc.version = Version(2, 3)
     doc.name = name
     doc.spdx_id = 'SPDXRef-DOCUMENT'
     doc.comment = 'Signature: none'
@@ -265,37 +273,47 @@ def add_checksum_to_spdx_file(spdx_file, algorithm_name, hash_value):
     :param hash_value:  the base64 encoded hash digest string
     :return: the supplied, modified SPDX File object, just in case.
     """
-    spdx_file.set_checksum(Algorithm(algorithm_name, hash_value))
+    algo = ChecksumAlgorithm.checksum_algorithm_from_string(algorithm_name)
+    spdx_file.set_checksum(Checksum(algo, hash_value))
     return spdx_file
 
 
-def read_sbom_file(filename):
+def read_spdx_file(filename):
     """
-    read the named SPDX tag/value file.
+    read the named SPDX file.
     :param filename: the file to read
     :return: the SPDX document
     """
-    p = Parser(Builder(), StandardLogger())
-    p.build()
-    with open(filename, "r") as f:
-        data = f.read()
-        document, error = p.parse(data)
+    if filename.endswith('.json'):
+        p = JsonParser(JsonBuilder(), StandardLogger())
+        with open(filename, "r") as f:
+            document, error = p.parse(f)
+    else:
+        p = TVParser(TVBuilder(), StandardLogger())
+        p.build()
+        with open(filename, "r") as f:
+            data = f.read()
+            document, error = p.parse(data)
     if error:
-        logging.warning('Error reading {}'.format(filename))
+        logging.warning(f'Error reading {filename}')
     return document
 
 
-def write_sbom_file(doc, filename):
+def write_spdx_file(doc, filename):
     """
     write a SPDX tag/value file.  Lifted nearly verbatim from spdx tools-python example code.
     :param doc: the SPDX document to save
     :param filename: the filename to write to
     :return: None
     """
+    if filename.endswith('.json'):
+        writer = json_writer
+    else:
+        writer = tv_writer
     with codecs.open(filename, mode="w", encoding="utf-8") as out:
         try:
-            write_document(doc, out)
-        except InvalidDocumentError as e:
+            writer.write_document(doc, out)
+        except writer.InvalidDocumentError as e:
             print("Document is Invalid:\n\t", end="")
             print("\n\t".join(e.args[0]))
             messages = ErrorMessages()
@@ -322,13 +340,13 @@ def serialize_spdx_doc(spdx_doc):
             continue
         v = spdx_doc.__dict__.get(k)
         if v is None:
-            result += '|{}:None'.format(k)
+            result += f'|{k}:None'
         elif isinstance(v, str):
-            result += '|{}:{}'.format(k, str(v))
+            result += f'|{k}:{str(v)}'
         elif isinstance(v, Version):
-            result += '|{}:{}'.format(k, str(v))
+            result += f'|{k}:{str(v)}'
         elif isinstance(v, License):
-            result += '|{}:{}'.format(k, str(v))
+            result += f'|{k}:{str(v)}'
         elif isinstance(v, CreationInfo):
             result += serialize_spdx_doc_creation_info(v)
         elif isinstance(v, list):
@@ -337,14 +355,18 @@ def serialize_spdx_doc(spdx_doc):
                 packages = sorted(v, key=lambda p: p.spdx_id)
                 for item in packages:
                     result += serialize_spdx_package_info(item)
+            elif k == 'files':
+                files = sorted(v, key=lambda f: f.spdx_id)
+                for file in files:
+                    result += serialize_spdx_file_info(file)
             else:
-                result += '|{}:['.format(k)
+                result += f'|{k}:['
                 first = True
                 for item in sorted(v, key=lambda val: str(val)):
                     if not first:
-                        result += ',{}'.format(str(item))
+                        result += f',{str(item)}'
                     else:
-                        result += '{}'.format(str(item))
+                        result += f'{str(item)}'
                         first = False
                 result += ']'
         else:
@@ -365,40 +387,38 @@ def serialize_spdx_package_info(spdx_package):
     for k in keys:
         v = spdx_package.__dict__.get(k)
         if v is None:
-            result += '|{}:None'.format(k)
+            result += f'|{k}:None'
         elif isinstance(v, str):
-            result += '|{}:{}'.format(k, str(v))
+            result += f'|{k}:{str(v)}'
+        elif isinstance(v, License):
+            result += f'|{k}:{str(v)}'
         elif isinstance(v, NoAssert):
-            result += '|{}:NOASSERTION'.format(k)
-        elif isinstance(v, list):
-            if k == 'files':
-                # sort by spdx id else there will be problems!
-                files = sorted(v, key=lambda f: f.spdx_id)
-                for item in files:
-                    result += serialize_spdx_file_info(item)
-            elif k == 'checksums':
-                result += '|{}:['.format(k)
+            result += f'|{k}:NOASSERTION'
+        elif isinstance(v, dict):
+            if k == 'checksums':
+                result += f'|{k}:['
                 checksums = []
-                for chk_sum in v:
-                    checksums.append('{}:{}'.format(chk_sum.identifier, chk_sum.value))
+                for algo, value in v.items():
+                    checksums.append(f'{algo.name}:{value.value}')
                 first = True
                 for checksum in sorted(checksums):
                     if first:
                         result += checksum
                         first = False
                     else:
-                        result += ',{}'.format(checksum)
+                        result += f',{checksum}'
                 result += ']'
-            else:
-                result += '|{}:['.format(k)
-                first = True
-                for item in sorted(v, key=lambda val: str(val)):
-                    if not first:
-                        result += ',{}'.format(str(item))
-                    else:
-                        result += '{}'.format(str(item))
-                        first = False
-                result += ']'
+
+        elif isinstance(v, list):
+            result += f'|{k}:['
+            first = True
+            for item in sorted(v, key=lambda val: str(val)):
+                if not first:
+                    result += f',{str(item)}'
+                else:
+                    result += f'{str(item)}'
+                    first = False
+            result += ']'
         else:
             print('unhandled type', k, v, type(v))
     return result
@@ -415,44 +435,42 @@ def serialize_spdx_file_info(spdx_file):
     for k in keys:
         v = spdx_file.__dict__.get(k)
         if v is None:
-            result += '|{}:None'.format(k)
+            result += f'|{k}:None'
         elif isinstance(v, str):
-            result += '|{}:{}'.format(k, str(v))
+            result += f'|{k}:{v}'
         elif isinstance(v, NoAssert):
-            result += '|{}:NOASSERTION'.format(k)
+            result += f'|{k}:NOASSERTION'
         elif isinstance(v, SPDXNone):
-            result += '|{}:{}'.format(k, str(SPDXNone))
+            result += f'|{k}:{str(SPDXNone)}'
         elif isinstance(v, License):
-            result += serialize_spdx_license(v)
-        elif isinstance(v, list):
-            result += '|{}:['.format(k)
+            result += f'|{k}:{str(v)}'
+        elif isinstance(v, dict):
             if k == 'checksums':
+                result += f'|{k}:['
                 checksums = []
-                for chk_sum in v:
-                    checksums.append('{}:{}'.format(chk_sum.identifier, chk_sum.value))
+                for algo, value in v.items():
+                    checksums.append(f'{algo.name}:{value.value}')
                 first = True
                 for checksum in sorted(checksums):
                     if first:
                         result += checksum
                         first = False
                     else:
-                        result += ',{}'.format(checksum)
-            else:
-                first = True
-                for item in sorted(v, key=lambda val: str(val)):
-                    if not first:
-                        result += ',{}'.format(str(item))
-                    else:
-                        result += '{}'.format(str(item))
-                        first = False
+                        result += f',{checksum}'
+                result += ']'
+        elif isinstance(v, list):
+            result += f'|{k}:['
+            first = True
+            for item in sorted(v, key=lambda val: str(val)):
+                if not first:
+                    result += f',{str(item)}'
+                else:
+                    result += f'{str(item)}'
+                    first = False
             result += ']'
         else:
             logging.warning('serialize_spdx_file_info unhandled type', k, v, type(v))
     return result
-
-
-def serialize_spdx_license(spdx_license):
-    return '|license_full_name:{}|license_identifier:{}'.format(spdx_license.full_name, spdx_license.identifier)
 
 
 def serialize_spdx_doc_creation_info(creation_info):
@@ -466,10 +484,10 @@ def serialize_spdx_doc_creation_info(creation_info):
     for creator in creation_info.creators:
         creators.append(str(creator))
     for creator in sorted(creators):
-        result += '|creator:{}'.format(creator)
-    result += '|created:{}'.format(str(creation_info.created)[:19])  # trim this!
-    result += '|comment:{}'.format(str(creation_info.comment))
-    result += '|license_list_version:{}'.format(str(creation_info.license_list_version))
+        result += f'|creator:{creator}'
+    result += f'|created:{str(creation_info.created)[:19]}'
+    result += f'|comment:{str(creation_info.comment)}'
+    result += f'|license_list_version:{str(creation_info.license_list_version)}'
     return result
 
 
@@ -496,4 +514,4 @@ def add_signature_to_spdx_document(spdx_doc, signature):
     :param signature: the base64-encoded digital signature to add to the Document
     :return: None
     """
-    spdx_doc.comment = 'Signature: {}'.format(signature)
+    spdx_doc.comment = f'Signature: {signature}'
