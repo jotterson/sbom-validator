@@ -33,9 +33,9 @@ import logging
 
 import signature_utilities
 import spdx_utilities
-from spdx.license import License
-from spdx.file import FileType
-from spdx.checksum import ChecksumAlgorithm
+from license_expression import get_spdx_licensing, LicenseExpression
+from spdx_tools.spdx.model.file import FileType
+from spdx_tools.spdx.model.checksum import ChecksumAlgorithm
 
 CHECKSUM_ALGORITHM = ChecksumAlgorithm.SHA256
 
@@ -139,7 +139,7 @@ def main():
                 warnings += 1
         else:
             ideal_file = ideal_file_dict['file']
-            if isinstance(ideal_file.conc_lics, License):
+            if isinstance(ideal_file.license_concluded, LicenseExpression):
                 ideal_file_sha256 = ideal_file.get_checksum(CHECKSUM_ALGORITHM).value
                 build_file_sha256 = build_file.get_checksum(CHECKSUM_ALGORITHM).value
                 if ideal_file_sha256 == build_file_sha256:

@@ -29,17 +29,22 @@ OF THE POSSIBILITY OF SUCH DAMAGE.
 import argparse
 import logging
 
+import license_expression
 from asciimatics.widgets import Button, Divider, DropdownList, Frame, Layout, MultiColumnListBox, Text, Widget
 from asciimatics.scene import Scene
 from asciimatics.screen import Screen
 from asciimatics.exceptions import NextScene, ResizeScreenError, StopApplication
 
+from license_expression import get_spdx_licensing, LicenseExpression
+
 import signature_utilities
 import spdx_utilities
-from spdx_utilities import add_signature_to_spdx_document, read_spdx_file, serialize_spdx_doc, write_spdx_file
-from spdx.checksum import ChecksumAlgorithm
-from spdx.license import License
-from spdx.utils import NoAssert, SPDXNone
+from spdx_utilities import (add_signature_to_spdx_document, get_specified_checksum,
+                            read_spdx_file, serialize_spdx_doc, write_spdx_file)
+from spdx_tools.spdx.model.checksum import ChecksumAlgorithm
+from spdx_tools.spdx.model.spdx_no_assertion import SpdxNoAssertion
+from spdx_tools.spdx.model.spdx_none import SpdxNone
+from spdx_tools.spdx.model.relationship import RelationshipType, Relationship
 
 
 class SpdxFileFilesAsListModel(object):
@@ -93,18 +98,18 @@ class SpdxFileFilesAsListModel(object):
         if self.current_file is None:
             data = {'name': '', 'comment': '', 'spdx_id': '', 'copyright': '', 'notice': ''}
         else:
-            copyright_text = self.current_file.copyright
+            copyright_text = self.current_file.copyright_text
             if copyright_text is None:
                 copyright_text = 'NONE'
-            elif isinstance(copyright_text, NoAssert):
+            elif isinstance(copyright_text, SpdxNoAssertion):
                 copyright_text = 'NOASSERTION'
 
-            if isinstance(self.current_file.conc_lics, NoAssert):
+            if isinstance(self.current_file.license_concluded, SpdxNoAssertion):
                 license_text = 'NOASSERTION'
-            elif isinstance(self.current_file.conc_lics, SPDXNone):
+            elif isinstance(self.current_file.license_concluded, SpdxNoAssertion):
                 license_text = 'NONE'
-            elif isinstance(self.current_file.conc_lics, License):
-                license_text = self.current_file.conc_lics.identifier
+            elif isinstance(self.current_file.license_concluded, LicenseExpression):
+                license_text = str(self.current_file.license_concluded)
             else:
                 license_text = 'NOASSERTION'
 
@@ -115,14 +120,13 @@ class SpdxFileFilesAsListModel(object):
                     'license': license_text,
                     'notice': self.current_file.notice,
                     }
-            for hash_name in ['SHA1', 'SHA256']:
-                algo = ChecksumAlgorithm.checksum_algorithm_from_string(hash_name)
-                hash_value = self.current_file.get_checksum(algo)
-                if hash_value is not None:
-                    value = hash_value.value
+            for algorithm in [ChecksumAlgorithm.SHA1, ChecksumAlgorithm.SHA256]:
+                checksum = get_specified_checksum(self.current_file.checksums, algorithm)
+                if checksum is not None:
+                    value = checksum.value
                 else:
                     value = ''
-                data[hash_name.lower()] = value
+                data[str(algorithm).split('.')[1]] = value
         return data
 
     def set_current_file(self, spdx_id):
@@ -147,9 +151,9 @@ class SpdxFileFilesAsListModel(object):
             self.current_file.comment = comment
             copyright_text = data.get('copyright') or 'NOASSERTION'
             if copyright_text.upper() == 'NOASSERTION':
-                self.current_file.copyright = NoAssert()
+                self.current_file.copyright = SpdxNoAssertion()
             elif copyright_text.upper() == 'NONE' or len(copyright_text) == 0:
-                self.current_file.copyright = SPDXNone
+                self.current_file.copyright = SpdxNone()
             else:
                 self.current_file.copyright = copyright_text
             notice = data.get('notice') or ''
@@ -157,12 +161,13 @@ class SpdxFileFilesAsListModel(object):
                 notice = None
             self.current_file.notice = notice
             license_text = data.get('license') or 'NOASSERTION'
-            if license_text == str(NoAssert()):
-                self.current_file.conc_lics = NoAssert()
+            if license_text == str(SpdxNoAssertion()):
+                self.current_file.conc_lics = SpdxNoAssertion()
             elif license_text == 'NONE' or len(license_text) == 0:
-                self.current_file.conc_lics = SPDXNone()
+                self.current_file.license_concluded = SpdxNone()
             else:
-                self.current_file.conc_lics = License.from_identifier(license_text)
+                new_license = license_expression.get_spdx_licensing().parse(license_text)
+                self.current_file.license_concluded = new_license
 
     def delete_file(self, file):
         """

@@ -33,7 +33,7 @@ import os
 
 import signature_utilities
 import spdx_utilities
-from spdx.checksum import ChecksumAlgorithm
+from spdx_tools.spdx.model.checksum import ChecksumAlgorithm
 
 CHECKSUM_ALGORITHM = ChecksumAlgorithm.SHA256
 
@@ -124,33 +124,32 @@ def main():
 
     merge_files_by_sha256 = {}
     for file in merge_files:
-        sha256 = file.get_checksum(CHECKSUM_ALGORITHM)
+        sha256 = spdx_utilities.get_specified_checksum(file.checksums, CHECKSUM_ALGORITHM)
         merge_files_by_sha256[sha256.value] = file
         
     for source_file in source_files:
-        sha256 = source_file.get_checksum(CHECKSUM_ALGORITHM)
+        sha256 = spdx_utilities.get_specified_checksum(source_file.checksums, CHECKSUM_ALGORITHM)
         if sha256 is not None:
             merge_file = merge_files_by_sha256.get(sha256.value)
             if merge_file is not None:
                 _, source_file_name = os.path.split(source_file.name)
                 _, merge_file_name = os.path.split(merge_file.name)
-                source_file.comment = merge_file.comment
                 if source_file_name != merge_file_name:
                     logging.warning('File names do not match but sha does: {} should be {}'.format(source_file_name,
                                                                                                    merge_file_name))
-                    if source_file.comment is None:
-                        source_file.comment = ''
-                    source_file.comment += 'name is {}'.format(merge_file_name)
                     warnings += 1
                 else:
                     successes += 1
                 source_file.file_types = merge_file.file_types
                 # source_file.chk_sums = merge_file.chk_sums  # not merging hashes -- better not need to!
-                source_file.conc_lics = merge_file.conc_lics
-                source_file.licenses_in_file = merge_file.licenses_in_file
+                source_file.license_concluded = merge_file.license_concluded
+                source_file.license_info_in_file = merge_file.license_info_in_file
                 source_file.license_comment = merge_file.license_comment
-                source_file.copyright = merge_file.copyright
+                source_file.copyright_text = merge_file.copyright_text
+                source_file.comment = merge_file.comment
                 source_file.notice = merge_file.notice
+                source_file.contributors = merge_file.contributors
+                source_file.attribution_texts = merge_file.attribution_texts
 
     if successes > 0:
         logging.info('{} spdx files merged using without error.'.format(successes))

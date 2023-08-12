@@ -36,9 +36,10 @@ import os
 from zipfile import ZipFile
 
 import signature_utilities
-from spdx.checksum import Checksum, ChecksumAlgorithm
+from spdx_tools.spdx.model.checksum import Checksum, ChecksumAlgorithm
+from spdx_tools.spdx.model.relationship import RelationshipType, Relationship
+
 from spdx_utilities import \
-    add_checksum_to_spdx_file, \
     add_signature_to_spdx_document, \
     get_digital_signature_from_spdx_document, \
     guess_spdx_file_type_from_data, \
@@ -52,7 +53,7 @@ from spdx_utilities import \
     write_spdx_file
 from validation_utilities import files_in_dir
 
-HASH_NAMES = ['SHA1', 'SHA256']
+ALGORITHMS = [ChecksumAlgorithm.SHA1, ChecksumAlgorithm.SHA256]
 spdx_id_counter = 0
 
 
@@ -81,22 +82,29 @@ def package_path_to_spdx_doc(args):
         full_path = f'{package_path}/{file}'
         if args.flat:
             _, file = os.path.split(file)
-        spdx_file = new_spdx_file(filename=file, spdx_id=new_spdx_id())
+
         if args.file_comment is not None:
-            spdx_file.comment = args.file_comment
+            comment = args.file_comment
         else:
-            spdx_file.comment = f'found during scan of {package_name}'
-        for hash_name in HASH_NAMES:
-            hasher = hashlib.new(hash_name)
+            comment = f'found during scan of {package_name}'
+        checksums = []
+        for algorithm in ALGORITHMS:
+            hasher = hashlib.new(str(algorithm).split('.')[1])
             with open(full_path, 'rb') as fh:
                 while True:
                     block = fh.read(64*1024)
                     if not block:
                         break
                     hasher.update(block)
-            add_checksum_to_spdx_file(spdx_file, hash_name.upper(), hasher.hexdigest())
+            checksums.append(Checksum(algorithm, hasher.hexdigest()))
+
+        spdx_file = new_spdx_file(filename=file, spdx_id=new_spdx_id(), checksums=checksums, comment=comment)
+
         set_spdx_file_type(spdx_file, full_path)
         spdx_doc.add_file(spdx_file)
+        spdx_doc.relationships.append(Relationship(spdx_doc.creation_info.spdx_id,
+                                                   RelationshipType.DESCRIBES,
+                                                   spdx_file.spdx_id))
     return spdx_doc
 
 
@@ -118,23 +126,30 @@ def package_zip_to_spdx_doc(args):
             else:
                 filename = file
             filename = './' + filename
-            spdx_file = new_spdx_file(filename=filename, spdx_id=new_spdx_id())
+
             if args.file_comment is not None:
-                spdx_file.comment = args.comment
+                comment = args.file_comment
             else:
-                spdx_file.comment = f'found during scan of {package_name}'
+                comment = f'found during scan of {package_name}'
+            checksums = []
             data = zipfile.read(file)
-            for hash_name in HASH_NAMES:
-                hasher = hashlib.new(hash_name)
+            for algorithm in ALGORITHMS:
+                hasher = hashlib.new(str(algorithm).split('.')[1])
                 hasher.update(data)
-                add_checksum_to_spdx_file(spdx_file, hash_name.upper(), hasher.hexdigest())
+                checksums.append(Checksum(algorithm, hasher.hexdigest()))
+
+            spdx_file = new_spdx_file(filename=filename, spdx_id=new_spdx_id(), checksums=checksums, comment=comment)
+
             spdx_file_types = guess_spdx_file_type_from_extension(file)
             if spdx_file_types is None:
                 spdx_file_types = guess_spdx_file_type_from_data(data)
             if spdx_file_types is None or len(spdx_file_types) == 0:
                 logging.error(f'bad... {file}')
             spdx_file.file_types = spdx_file_types
-            spdx_doc.add_file(spdx_file)
+            spdx_doc.files.append(spdx_file)
+            spdx_doc.relationships.append(Relationship(spdx_doc.creation_info.spdx_id,
+                                                       RelationshipType.DESCRIBES,
+                                                       spdx_file.spdx_id))
     return spdx_doc
 
 

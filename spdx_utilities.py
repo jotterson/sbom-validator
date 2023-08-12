@@ -26,29 +26,22 @@ OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISE
 OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
-import codecs
 import logging
 import pathlib
+from datetime import datetime
 
-import spdx.writers.tagvalue as tv_writer
-import spdx.writers.json as json_writer
+from license_expression import get_spdx_licensing, LicenseExpression
 
-from spdx.parsers.loggers import ErrorMessages
-from spdx.parsers.loggers import StandardLogger
-from spdx.checksum import Checksum, ChecksumAlgorithm
-from spdx.document import Document
-from spdx.license import License
-from spdx.version import Version
-from spdx.creationinfo import CreationInfo
-from spdx.creationinfo import Tool
-from spdx.package import Package
-from spdx.file import File, FileType
-from spdx.utils import NoAssert, SPDXNone
-
-from spdx.parsers.tagvalue import Parser as TVParser
-from spdx.parsers.jsonparser import Parser as JsonParser
-from spdx.parsers.tagvaluebuilders import Builder as TVBuilder
-from spdx.parsers.jsonyamlxmlbuilders import Builder as JsonBuilder
+from spdx_tools.spdx.model.actor import Actor, ActorType
+from spdx_tools.spdx.model.checksum import Checksum, ChecksumAlgorithm
+from spdx_tools.spdx.model.document import CreationInfo, Document
+from spdx_tools.spdx.model.version import Version
+from spdx_tools.spdx.model.package import Package
+from spdx_tools.spdx.model.file import File, FileType
+from spdx_tools.spdx.model.spdx_no_assertion import SpdxNoAssertion
+from spdx_tools.spdx.model.spdx_none import SpdxNone
+from spdx_tools.spdx.parser.parse_anything import parse_file
+from spdx_tools.spdx.writer.write_anything import write_file
 
 
 PARTIAL_LICENSES_LIST = [
@@ -68,15 +61,6 @@ PARTIAL_LICENSES_LIST = [
     'SPL-1.0',  # Sun Public License
     ]
 
-ADDITIONAL_LICENSES_LIST = [
-    ('LicenseRef-LBC', 'Legion of the Bouncy Castle'),
-    ('LicenseRef-EDL-1.0', 'EDL 1.0'),
-    ('LicenseRef-METASTUFF', 'MetaStuff, Ltd. and DOM4J contributors'),
-    ('LicenseRef-OracleJava', 'Oracle Binary Code License Agreement for Java SE and JavaFX Technologies'),
-    ('LicenseRef-OtherCommercial', 'Other Commercial License'),
-    ('LicenseRef-QOS.ch', 'QOS.ch (like MIT)'),
-    ('LicenseRef-Werken', 'The Werken Company (like BSD-3'),
-    ]
 
 ALL_LICENSES = []
 
@@ -86,12 +70,10 @@ def get_licenses_list():
     if len(ALL_LICENSES) == 0:
         licenses = []
         for license_name in PARTIAL_LICENSES_LIST:
-            spdx_license = License.from_identifier(license_name)
-            licenses.append((spdx_license.full_name, license_name))
-        for license_data in ADDITIONAL_LICENSES_LIST:
-            licenses.append((license_data[1], license_data[0]))
+            spdx_license = get_spdx_licensing().parse(license_name)
+            licenses.append((str(spdx_license), license_name))
         licenses = sorted(licenses, key=lambda l: l[0])
-        full_list = [('None', str(SPDXNone())), ('No Assertion', str(NoAssert()))]
+        full_list = [('None', str(SpdxNone())), ('No Assertion', str(SpdxNoAssertion()))]
         full_list.extend(licenses)
         ALL_LICENSES = full_list
     return ALL_LICENSES
@@ -212,15 +194,18 @@ def new_spdx_doc(name='SPDX-SBOM', namespace='https://www.example.com/example', 
     :param toolname: name of tool used to create new SPDX document
     :return: the new SPDX Document object
     """
-    doc = Document()
-    doc.version = Version(2, 3)
-    doc.name = name
-    doc.spdx_id = 'SPDXRef-DOCUMENT'
-    doc.comment = 'Signature: none'
-    doc.namespace = namespace
-    doc.data_license = License.from_identifier("CC0-1.0")
-    doc.creation_info.add_creator(Tool(toolname))
-    doc.creation_info.set_created_now()
+
+    creation_info = CreationInfo(
+        spdx_version='SPDX-2.3',
+        spdx_id='SPDXRef-DOCUMENT',
+        name=name,
+        data_license='CC0-1.0',
+        document_namespace=namespace,
+        creators=[Actor(ActorType.TOOL, name=toolname)],
+        created=datetime.now(),
+    )
+
+    doc = Document(creation_info)
     return doc
 
 
@@ -239,15 +224,15 @@ def new_spdx_pkg(spdx_id, name, version, file_name=None):
     if file_name is not None:
         package.file_name = file_name
     package.spdx_id = spdx_id
-    package.download_location = NoAssert()  # "NOASSERTION"
-    package.conc_lics = NoAssert()
-    package.license_declared = NoAssert()
-    package.add_lics_from_file(NoAssert())
-    package.cr_text = NoAssert()
+    package.download_location = SpdxNoAssertion()  # "NOASSERTION"
+    package.conc_lics = SpdxNoAssertion()
+    package.license_declared = SpdxNoAssertion()
+    package.add_lics_from_file(SpdxNoAssertion())
+    package.cr_text = SpdxNoAssertion()
     return package
 
 
-def new_spdx_file(filename, spdx_id, comment=None):
+def new_spdx_file(filename, spdx_id, checksums, comment=None):
     """
     Create a new SPDX File object
     :param filename: the relative path to the file
@@ -255,26 +240,11 @@ def new_spdx_file(filename, spdx_id, comment=None):
     :param comment: optional comment string
     :return: the SPDX File object
     """
-    spdx_file = File(filename)
-    spdx_file.spdx_id = spdx_id
-    if comment:
-        spdx_file.comment = comment
-    spdx_file.conc_lics = NoAssert()
-    spdx_file.add_lics(NoAssert())
-    spdx_file.copyright = NoAssert()
-    return spdx_file
-
-
-def add_checksum_to_spdx_file(spdx_file, algorithm_name, hash_value):
-    """
-    add a checksum to a SPDX file object
-    :param spdx_file: the SPDX File object to modify
-    :param algorithm_name: the name of the hash algorithm
-    :param hash_value:  the base64 encoded hash digest string
-    :return: the supplied, modified SPDX File object, just in case.
-    """
-    algo = ChecksumAlgorithm.checksum_algorithm_from_string(algorithm_name)
-    spdx_file.set_checksum(Checksum(algo, hash_value))
+    spdx_file = File(filename, spdx_id, checksums,
+                     license_concluded=SpdxNoAssertion(),
+                     license_info_in_file=[SpdxNoAssertion()],
+                     copyright_text=SpdxNoAssertion(),
+                     comment=comment)
     return spdx_file
 
 
@@ -284,42 +254,17 @@ def read_spdx_file(filename):
     :param filename: the file to read
     :return: the SPDX document
     """
-    if filename.endswith('.json'):
-        p = JsonParser(JsonBuilder(), StandardLogger())
-        with open(filename, "r") as f:
-            document, error = p.parse(f)
-    else:
-        p = TVParser(TVBuilder(), StandardLogger())
-        p.build()
-        with open(filename, "r") as f:
-            data = f.read()
-            document, error = p.parse(data)
-    if error:
-        logging.warning(f'Error reading {filename}')
-    return document
+    return parse_file(filename)
 
 
 def write_spdx_file(doc, filename):
     """
-    write a SPDX tag/value file.  Lifted nearly verbatim from spdx tools-python example code.
+    write a SPDX file.
     :param doc: the SPDX document to save
     :param filename: the filename to write to
     :return: None
     """
-    if filename.endswith('.json'):
-        writer = json_writer
-    else:
-        writer = tv_writer
-    with codecs.open(filename, mode="w", encoding="utf-8") as out:
-        try:
-            writer.write_document(doc, out)
-        except writer.InvalidDocumentError as e:
-            print("Document is Invalid:\n\t", end="")
-            print("\n\t".join(e.args[0]))
-            messages = ErrorMessages()
-            doc.validate(messages)
-            print("\n".join(messages.messages))
-            raise
+    write_file(doc, filename)
 
 
 # noinspection DuplicatedCode
@@ -345,7 +290,7 @@ def serialize_spdx_doc(spdx_doc):
             result += f'|{k}:{str(v)}'
         elif isinstance(v, Version):
             result += f'|{k}:{str(v)}'
-        elif isinstance(v, License):
+        elif isinstance(v, LicenseExpression):
             result += f'|{k}:{str(v)}'
         elif isinstance(v, CreationInfo):
             result += serialize_spdx_doc_creation_info(v)
@@ -390,9 +335,9 @@ def serialize_spdx_package_info(spdx_package):
             result += f'|{k}:None'
         elif isinstance(v, str):
             result += f'|{k}:{str(v)}'
-        elif isinstance(v, License):
+        elif isinstance(v, LicenseExpression):
             result += f'|{k}:{str(v)}'
-        elif isinstance(v, NoAssert):
+        elif isinstance(v, SpdxNoAssertion):
             result += f'|{k}:NOASSERTION'
         elif isinstance(v, dict):
             if k == 'checksums':
@@ -438,11 +383,11 @@ def serialize_spdx_file_info(spdx_file):
             result += f'|{k}:None'
         elif isinstance(v, str):
             result += f'|{k}:{v}'
-        elif isinstance(v, NoAssert):
+        elif isinstance(v, SpdxNoAssertion):
             result += f'|{k}:NOASSERTION'
-        elif isinstance(v, SPDXNone):
-            result += f'|{k}:{str(SPDXNone)}'
-        elif isinstance(v, License):
+        elif isinstance(v, SpdxNone):
+            result += f'|{k}:{str(SpdxNone)}'
+        elif isinstance(v, LicenseExpression):
             result += f'|{k}:{str(v)}'
         elif isinstance(v, dict):
             if k == 'checksums':
@@ -486,7 +431,7 @@ def serialize_spdx_doc_creation_info(creation_info):
     for creator in sorted(creators):
         result += f'|creator:{creator}'
     result += f'|created:{str(creation_info.created)[:19]}'
-    result += f'|comment:{str(creation_info.comment)}'
+    result += f'|comment:{str(creation_info.document_comment)}'
     result += f'|license_list_version:{str(creation_info.license_list_version)}'
     return result
 
@@ -499,8 +444,9 @@ def get_digital_signature_from_spdx_document(spdx_doc):
     :param spdx_doc: the SPDX Document object
     :return: str
     """
-    if spdx_doc.comment is not None:
-        doc_comment = spdx_doc.comment.strip()
+    comment = spdx_doc.creation_info.creator_comment
+    if comment is not None:
+        doc_comment = comment.strip()
         if doc_comment[0:10] == 'Signature:':
             signature = doc_comment[10:].strip()
             return signature
@@ -514,4 +460,11 @@ def add_signature_to_spdx_document(spdx_doc, signature):
     :param signature: the base64-encoded digital signature to add to the Document
     :return: None
     """
-    spdx_doc.comment = f'Signature: {signature}'
+    spdx_doc.creation_info.creator_comment = f'Signature: {signature}'
+
+
+def get_specified_checksum(checksums: list[Checksum], algorithm: ChecksumAlgorithm=ChecksumAlgorithm.SHA256):
+    for checksum in checksums:
+        if checksum.algorithm == algorithm:
+            return checksum
+    return None

@@ -33,7 +33,8 @@ import hashlib
 import logging
 import os
 from zipfile import ZipFile
-from spdx.file import FileType
+from spdx_tools.spdx.model.checksum import ChecksumAlgorithm, Checksum
+from spdx_tools.spdx.model.file import FileType
 
 import signature_utilities
 import spdx_utilities
@@ -42,7 +43,7 @@ import validation_utilities
 
 def validate_package_path(package_path, sbom_files):
     """
-    validate a package installed on dis.
+    validate a package installed on disk.
     :param package_path: the path to the package files
     :param sbom_files: a list of SBOM files to compare to
     :return: True if package passes integrity verification.
@@ -168,21 +169,20 @@ def validate_package_zip(package_zip, sbom_files):
         # now compare checksums for all files that are both on disk and in the SBOM.
         mismatched_files = 0
         unchecked_files = 0
-        hash_algorithm = 'sha256'
+        hash_algorithm = ChecksumAlgorithm.SHA256
+
+        hash_algorithm_name = str(hash_algorithm).split('.')[1].lower()
         for file, file_dict in files_on_disk.items():
             if file_dict.get('found_in_sbom'):
                 sbom_file = file_dict.get('sbom_file')
                 if FileType.APPLICATION in sbom_file.file_types:
-                    checksums = sbom_file.chk_sums
                     # get checksum hash value from the SBOM
-                    sbom_file_hash_value = None
-                    for chk_sum in checksums:
-                        if chk_sum.identifier.lower() == hash_algorithm:
-                            sbom_file_hash_value = chk_sum.value
+                    checksum = spdx_utilities.get_specified_checksum(sbom_file.checksums, hash_algorithm)
+                    sbom_file_hash_value = None if checksum is None else checksum.value
                     if sbom_file_hash_value is None:
-                        logging.error('Cannot get {} hash value for file {}.'.format(hash_algorithm, file))
+                        logging.error('Cannot get {} hash value for file {}.'.format(hash_algorithm_name, file))
                         exit(1)
-                    hasher = hashlib.new(hash_algorithm)
+                    hasher = hashlib.new(hash_algorithm_name)
                     data = zipfile.read(file)
                     hasher.update(data)
                     disk_file_hash_value = hasher.hexdigest()
@@ -190,7 +190,7 @@ def validate_package_zip(package_zip, sbom_files):
                     if sbom_file_hash_value != disk_file_hash_value:
                         # danger will robinson!
                         logging.warning('Checksum mismatch! ' +
-                                        'File {} {} checksum does not match the SBOM'.format(file, hash_algorithm))
+                                        'File {} {} checksum does not match the SBOM'.format(file, hash_algorithm_name))
                         mismatched_files += 1
             else:
                 unchecked_files += 1
@@ -208,7 +208,7 @@ def validate_package_zip(package_zip, sbom_files):
 
 # noinspection DuplicatedCode
 def main():
-    parser = argparse.ArgumentParser(description='Bootstrap SBOM file')
+    parser = argparse.ArgumentParser(description='Validate File Contents with SBOM file')
     parser.add_argument('--debug', action='store_true', help='show logging informational output')
     parser.add_argument('--info', action='store_true', help='show informational diagnostic output')
     parser.add_argument('--sbom-file', type=str, help='SBOM tag/value filename to write')
@@ -262,7 +262,7 @@ def main():
 
     new_doc = spdx_utilities.read_spdx_file(args.sbom_file)
     if new_doc is not None:
-        logging.info('SBOM file contains {} file entries'.format(len(new_doc.packages[0].files)))
+        logging.info('SBOM file contains {} file entries'.format(len(new_doc.files)))
     else:
         logging.error('Could not read SBOM file {}!'.format(args.sbom_file))
         exit(1)
